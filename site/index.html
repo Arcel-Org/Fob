@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fob — Encrypted Vault on a USB Drive</title>
+<style>
+  :root{
+    --bg:#07090f; --surface:#0c1220; --surface2:#111827; --border:#1e2d47;
+    --blue:#3b82f6; --blue-glow:rgba(59,130,246,.13);
+    --text:#e2e9f6; --text-2:#617698; --ok:#22c55e; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:860px;margin:0 auto;padding:48px 24px 80px}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:40px}
+  .logo{width:40px;height:40px;border-radius:10px;background:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px;color:#fff;box-shadow:0 0 24px var(--blue-glow)}
+  h1{font-size:26px;font-weight:700}
+  .tag{display:inline-block;margin-left:10px;padding:3px 10px;border-radius:999px;background:var(--surface2);border:1px solid var(--border);font-size:12px;color:var(--text-2)}
+  .tag b{color:var(--ok)}
+  .lead{color:var(--text-2);font-size:17px;margin-bottom:44px}
+  .lead b{color:var(--text)}
+  h2{font-size:19px;margin:44px 0 14px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px 24px;margin-bottom:16px}
+  code{font-family:var(--mono);font-size:13.5px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px 7px}
+  pre{font-family:var(--mono);font-size:13.5px;background:#0a101d;border:1px solid var(--border);border-radius:10px;padding:16px 18px;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
+  .install{padding:14px 0}
+  .install .hash{color:var(--text-2);font-size:12px;margin-top:10px;word-break:break-all}
+  a{color:var(--blue)}
+  .steps li{margin:8px 0;color:var(--text-2)}
+  .steps b{color:var(--text)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:700px){.grid{grid-template-columns:1fr}}
+  .cta{display:inline-block;margin-top:6px;background:var(--blue);color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px}
+  .muted{color:var(--text-2);font-size:13.5px}
+  .status{color:var(--ok);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">F</div>
+    <h1>Fob<span class="tag">latest <b id="version-badge">…</b></span></h1>
+  </header>
+  <p class="lead">Your passwords, TOTP codes, SSH keys, and notes live in a single encrypted file on a <b>USB drive</b> — opened entirely in the browser. No account, no cloud, no app to install on the machine you use it on. Nothing decrypts without your passphrase.</p>
+
+  <h2>Install</h2>
+  <div class="card">
+    <p class="muted" style="margin-bottom:10px">Run this once to install the <code>fob</code> command (used only for installing/updating and USB operations). Daily use happens in the browser — open <code>index.html</code> on the USB.</p>
+    <pre id="install-cmd" class="install">curl -fsSL https://raw.githubusercontent.com/Arcel-Org/Fob/main/install/install.sh | sh</pre>
+    <p class="hash" id="install-hash">SHA256 of install.sh: …</p>
+    <p class="muted" style="margin-top:14px">The command above is pinned to the latest release tag, so what you run today is exactly what shipped with that release. The hash is fetched live so you can verify before piping to a shell.</p>
+  </div>
+
+  <h2>Check your version</h2>
+  <div class="card">
+    <ul class="steps">
+      <li><b>fob status</b> — lists detected USB drives, shows whether each has a vault, and prints the installed Fob version.</li>
+      <li><b>fob update --check</b> — compares your installed version against the latest release.</li>
+      <li><b>On the USB</b> — open a vault file and click <b>Vault info</b> in the browser to see its format version, KDF (Argon2id), and fingerprint.</li>
+    </ul>
+    <p class="muted" style="margin-top:10px">You have <span id="my-version">v0.1.0</span>. Latest release: <b id="latest-version">…</b></p>
+  </div>
+
+  <h2>Tools</h2>
+  <div class="grid">
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:8px">Header inspector</h3>
+      <p class="muted" style="margin-bottom:14px">Drop a <code>vault.fob</code> file to read its <b>public</b> header: format version, KDF and its parameters, recovery-key status, and fingerprint. Only public metadata — no passphrase, no decryption, no data leaves your browser.</p>
+      <a class="cta" href="header-inspector.html">Open header inspector</a>
+    </div>
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:8px">Source</h3>
+      <p class="muted" style="margin-bottom:14px">Fob is open source (Apache-2.0 / MIT). Review the crypto, the format, and the security model on GitHub.</p>
+      <a class="cta" href="https://github.com/Arcel-Org/Fob" style="background:var(--surface2);border:1px solid var(--border)">View on GitHub</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(async function(){
+  // Fetch the latest release tag + install.sh hash from GitHub, live.
+  function el(id){ return document.getElementById(id); }
+  try {
+    const r = await fetch("https://api.github.com/repos/Arcel-Org/Fob/releases/latest", {headers:{Accept:"application/vnd.github+json"}});
+    const j = await r.json();
+    const tag = j.tag_name || "main";
+    el("version-badge").textContent = tag;
+    el("latest-version").textContent = tag;
+    el("install-cmd").textContent =
+      `curl -fsSL https://raw.githubusercontent.com/Arcel-Org/Fob/${tag}/install/install.sh | sh`;
+    const sh = await fetch(`https://raw.githubusercontent.com/Arcel-Org/Fob/${tag}/install/install.sh`);
+    const text = await sh.text();
+    const buf = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest("SHA-256", buf);
+    const hex = [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
+    el("install-hash").textContent = `SHA256 of install.sh (${tag}): ${hex}`;
+  } catch(e) {
+    el("version-badge").textContent = "main";
+    el("latest-version").textContent = "unavailable offline";
+    el("install-hash").textContent = "SHA256 of install.sh: (could not fetch — check connection)";
+  }
+})();
+</script>
+</body>
+</html>

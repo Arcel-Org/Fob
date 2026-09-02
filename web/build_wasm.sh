@@ -35,9 +35,9 @@ echo ">> generating classic-script glue with wasm-bindgen"
   --out-dir "$OUT" --target no-modules
 
 echo ">> inlining wasm as base64 + bootstrap into web/fob-wasm.js"
-python3 - "$OUT/fob_wasm.js" "$OUT/fob_wasm_bg.wasm" "$ROOT/web/fob-wasm.js" "$ROOT/web/index.template.html" "$ROOT/web/index.html" <<'PY'
+python3 - "$OUT/fob_wasm.js" "$OUT/fob_wasm_bg.wasm" "$ROOT/web/fob-wasm.js" "$ROOT/web/index.template.html" "$ROOT/web/index.html" "$ROOT/site/header-inspector.html" <<'PY'
 import base64, sys
-glue, wasm, bundle_out, template_out, index_out = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+glue, wasm, bundle_out, template_out, index_out, inspector_out = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]
 with open(glue) as f:
     glue_js = f.read()
 with open(wasm, 'rb') as f:
@@ -67,17 +67,29 @@ with open(bundle_out, 'w') as f:
     f.write("\n")
     f.write(bootstrap)
 
-# Inline the bundle into the self-contained index.html at the marker, so the
-# single file the CLI ships to the USB needs no external fetch. The template
-# keeps a clean placeholder for regeneration.
+# Inline the bundle into the self-contained pages at the marker so they need
+# no external fetch. index.html is generated from index.template.html (its
+# hand-edited source); header-inspector.html is itself the source (its marker
+# is edited in place and replaced on each build).
 marker = "<!--FOBWASM_INLINE_MARKER-->"
 inline = "<script>\n" + glue_js + "\n" + bootstrap + "\n</script>"
+
+# 1) index.html ← index.template.html
 with open(template_out) as f:
     html = f.read()
 if marker not in html:
     raise SystemExit(f"marker {marker!r} not found in {template_out}")
 html = html.replace(marker, inline)
 with open(index_out, 'w') as f:
+    f.write(html)
+
+# 2) header-inspector.html ← itself (source has the marker)
+with open(inspector_out) as f:
+    html = f.read()
+if marker not in html:
+    raise SystemExit(f"marker {marker!r} not found in {inspector_out}")
+html = html.replace(marker, inline)
+with open(inspector_out, 'w') as f:
     f.write(html)
 print(f"wrote {bundle_out}")
 print(f"inlined into {index_out}")

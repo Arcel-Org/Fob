@@ -1,9 +1,10 @@
-name: Deploy web vault to GitHub Pages
+name: Deploy GitHub Pages front door
 
 on:
   push:
     branches: [main]
     paths:
+      - site/**
       - web/**
   workflow_dispatch:
 
@@ -31,7 +32,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: web/
+          path: site/
 
       - name: Deploy to GitHub Pages
         id: deploy
