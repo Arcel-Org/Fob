@@ -86,8 +86,13 @@ pub fn create_vault(
     decoy_pass: Option<String>,
     duress_pass: Option<String>,
     recovery_enabled: bool,
+    max_security: bool,
 ) -> Result<Vec<u8>, JsValue> {
     let mut params = VaultInitParams::new(main_pass.as_bytes().to_vec(), DEFAULT_VAULT_SIZE);
+
+    if max_security {
+        params.kdf_params = fob_core::vault::KdfParams::max_security_argon2id();
+    }
 
     if let Some(decoy) = decoy_pass {
         params.decoy_passphrase = Some(decoy.into_bytes());

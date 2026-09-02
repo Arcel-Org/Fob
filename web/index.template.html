@@ -90,6 +90,9 @@ svg{display:block;flex-shrink:0}
 .field input,.field textarea{background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);padding:10px 12px;font-size:14px;outline:none;width:100%;transition:border-color var(--t),box-shadow var(--t)}
 .field input:focus,.field textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow)}
 .field input.error{border-color:var(--danger)}
+.check-row{display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;color:var(--text)}
+.check-row input{width:16px;height:16px;margin-top:2px;accent-color:var(--blue);cursor:pointer}
+.muted{color:var(--text-2)}
 .field input::placeholder,.field textarea::placeholder{color:var(--text-3)}
 .pass-wrap{position:relative}
 .pass-wrap input{padding-right:40px}
@@ -378,6 +381,13 @@ svg{display:block;flex-shrink:0}
         <label>Duress Passphrase</label>
         <input id="create-duress-pass" type="password" autocomplete="new-password" spellcheck="false" placeholder="Optional — destroys this vault" />
       </div>
+      <label class="check-row" style="margin-top:6px">
+        <input type="checkbox" id="create-max-security" />
+        <span>
+          <b>Max-security Argon2id</b>
+          <span class="muted" style="display:block;font-size:12px">128 MiB / 4 passes / 8 lanes — stronger but slower to unlock.</span>
+        </span>
+      </label>
     </div>
     <div class="err-msg" id="create-err"></div>
     <div class="btn-row">
@@ -700,8 +710,8 @@ function vaultSave(fileBytes, passBytes, slot, json) {
 /// decoy and/or duress slot. Every slot cell — populated or not — is the
 /// same size and starts as random bytes, so an observer can't tell which
 /// slots (if any beyond the one they were given a passphrase for) are in use.
-function createVaultBytes(mainPass, decoyPass, duressPass) {
-  return FobWasm.create_vault(mainPass, decoyPass || null, duressPass || null, false);
+function createVaultBytes(mainPass, decoyPass, duressPass, maxSecurity) {
+  return FobWasm.create_vault(mainPass, decoyPass || null, duressPass || null, false, !!maxSecurity);
 }
 
 // ── SSH key import ───────────────────────────────────────────────────
@@ -990,6 +1000,7 @@ async function doCreateVault() {
   const p2 = document.getElementById('create-pass2');
   const decoyEl  = document.getElementById('create-decoy-pass');
   const duressEl = document.getElementById('create-duress-pass');
+  const maxSecEl = document.getElementById('create-max-security');
   const errEl = document.getElementById('create-err');
   const btn   = document.getElementById('create-btn');
   errEl.textContent = '';
@@ -1014,7 +1025,7 @@ async function doCreateVault() {
   }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating…';
   try {
-    vaultFileData   = await createVaultBytes(p1.value, decoyPass, duressPass);
+    vaultFileData   = await createVaultBytes(p1.value, decoyPass, duressPass, maxSecEl.checked);
     vaultPassphrase = new TextEncoder().encode(p1.value);
     const result    = await vaultUnlock(vaultFileData, vaultPassphrase);
     vaultJSON = result.json;

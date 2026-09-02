@@ -51,6 +51,9 @@ pub enum Commands {
     Format {
         /// Path to a specific USB device. Auto-picks the sole USB drive if omitted.
         device: Option<PathBuf>,
+        /// Use the max-security Argon2id profile (128 MiB / 4 passes / 8 lanes).
+        #[arg(long)]
+        max_security: bool,
     },
 
     /// Show detected USB drives, which have a vault, and the current version.
@@ -74,7 +77,10 @@ impl Cli {
         match self.command {
             None => cmd_status(),
             Some(Commands::Install { device }) => cmd_install(device.or(self.device)),
-            Some(Commands::Format { device }) => cmd_format(device.or(self.device)),
+            Some(Commands::Format {
+                device,
+                max_security,
+            }) => cmd_format(device.or(self.device), max_security),
             Some(Commands::Status) => cmd_status(),
             Some(Commands::Recover { device }) => cmd_recover(device.or(self.device)),
             Some(Commands::Update { check }) => cmd_update(check),
@@ -167,7 +173,7 @@ fn cmd_status() -> Result<()> {
 }
 
 /// `fob format` — format a USB drive and create a fresh v4/Argon2id vault.
-fn cmd_format(device: Option<PathBuf>) -> Result<()> {
+fn cmd_format(device: Option<PathBuf>, max_security: bool) -> Result<()> {
     use zeroize::Zeroize;
 
     let mount = resolve_device_path(device)?;
@@ -211,6 +217,10 @@ fn cmd_format(device: Option<PathBuf>) -> Result<()> {
         main_pass.as_bytes().to_vec(),
         fob_core::format::DEFAULT_VAULT_SIZE,
     );
+    if max_security {
+        params.kdf_params = fob_core::vault::KdfParams::max_security_argon2id();
+        println!("✓ Max-security Argon2id profile (128 MiB / 4 passes / 8 lanes).");
+    }
 
     print!("Generate a post-quantum recovery key? [y/N] ");
     std::io::stdout().flush()?;

@@ -507,6 +507,48 @@ async def check_passphrase_policy_enforced(chrome):
         await cdp.close()
 
 
+async def check_max_security_profile(chrome):
+    """The optional max-security Argon2id profile must be selectable in the
+    create card and actually raise the KDF parameters (128 MiB / 4 passes /
+    8 lanes) vs. the default (64 MiB / 3 passes / 4 lanes)."""
+    cdp = await chrome.open_page()
+    try:
+        # Check the checkbox exists, then create with it enabled.
+        has_box = await cdp.eval("!!document.getElementById('create-max-security')")
+        if not has_box:
+            return False, "max-security checkbox missing from create card"
+        await click(cdp, '[data-action="show-create"]')
+        await asyncio.sleep(0.3)
+        await set_value(cdp, "create-pass", PASSPHRASE)
+        await set_value(cdp, "create-pass2", PASSPHRASE)
+        await cdp.eval(
+            "document.getElementById('create-max-security').checked = true; true;",
+            await_promise=False,
+        )
+        await click(cdp, '[data-action="create-vault"]')
+        # create is async (Argon2id); wait for vault UI to appear
+        for _ in range(100):
+            vis = await cdp.eval(
+                "document.getElementById('vault-ui').style.display === 'flex'"
+            )
+            if vis:
+                break
+            await asyncio.sleep(0.1)
+
+        hdr = await cdp.eval(
+            "JSON.stringify(FobWasm.parse_header(vaultFileData))"
+        )
+        hdr = json.loads(hdr)
+        if not (hdr["argon2MemoryKib"] == 131072 and hdr["kdfTimeCost"] == 4 and hdr["argon2Parallelism"] == 8):
+            return False, (
+                "max-security profile not applied: "
+                f"got {hdr['argon2MemoryKib']} KiB / {hdr['kdfTimeCost']} passes / {hdr['argon2Parallelism']} lanes"
+            )
+        return True, "max-security checkbox produced 128 MiB / 4 passes / 8 lanes"
+    finally:
+        await cdp.close()
+
+
 CHECKS = [
     ("search filtering", check_search_filtering),
     ("TOTP countdown display", check_totp_countdown),
@@ -514,6 +556,7 @@ CHECKS = [
     ("auto-lock after inactivity timeout", check_autolock_timeout),
     ("v4 Argon2id vault round-trips in-browser", check_v4_roundtrip),
     ("passphrase policy enforced on create", check_passphrase_policy_enforced),
+    ("max-security Argon2id profile selectable", check_max_security_profile),
 ]
 
 

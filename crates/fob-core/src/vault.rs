@@ -43,6 +43,19 @@ impl KdfParams {
         }
     }
 
+    /// An optional, stronger Argon2id profile for users who explicitly opt
+    /// in to max security: 128 MiB memory / 4 passes / 8 lanes, i.e. double
+    /// the default memory and lanes plus an extra pass. Still within the
+    /// header's hard maxima so a vault encrypted with it stays portable.
+    pub fn max_security_argon2id() -> Self {
+        Self {
+            algorithm: KdfAlgorithm::Argon2id,
+            time_cost: 4,
+            memory_kib: 131_072, // 128 MiB
+            parallelism: 8,
+        }
+    }
+
     /// PBKDF2-HMAC-SHA256 with the given iteration count — used for v3
     /// vaults, browser-compatible vaults, and fast test fixtures.
     pub fn pbkdf2(iterations: u32) -> Self {
