@@ -7,21 +7,21 @@
 <title>Fob — Header Inspector</title>
 <style>
   :root{
-    --bg:#06080f; --surface:#0b1220; --surface2:#101a2e; --surface3:#16233d;
-    --border:#1c2b47; --border2:#2a3f63;
-    --blue:#3b82f6; --indigo:#6366f1; --violet:#8b5cf6;
-    --text:#e6edf8; --text-2:#8ba1c4; --text-3:#4a5f85;
-    --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444;
+    --bg:#ffffff; --surface:#ffffff; --surface2:#f6f7f9; --surface3:#eef0f4;
+    --border:#e7e9ee; --border2:#d5d9e0;
+    --blue:#1a56db; --indigo:#1a56db; --violet:#1e66f2;
+    --text:#12151c; --text-2:#5b6470; --text-3:#9aa3af;
+    --ok:#16a34a; --warn:#c77400; --danger:#d92d20;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
-    --grad:linear-gradient(120deg,#3b82f6 0%,#6366f1 50%,#8b5cf6 100%);
+    --grad:linear-gradient(120deg,#1a56db 0%,#1e66f2 100%);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font:15px/1.6 var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh}
   .bg{position:fixed;inset:0;z-index:-1;overflow:hidden}
-  .orb{position:absolute;border-radius:50%;filter:blur(100px);opacity:.26}
-  .orb-1{width:520px;height:520px;top:-200px;left:-160px;background:radial-gradient(circle,#1e3caa,transparent 70%)}
-  .orb-2{width:440px;height:440px;bottom:-180px;right:-140px;background:radial-gradient(circle,#4f1ea0,transparent 70%)}
+  .orb{position:absolute;border-radius:50%;filter:blur(100px);opacity:.5}
+  .orb-1{width:520px;height:520px;top:-200px;left:-160px;background:radial-gradient(circle,rgba(26,86,219,.07),transparent 70%)}
+  .orb-2{width:440px;height:440px;bottom:-180px;right:-140px;background:radial-gradient(circle,rgba(26,86,219,.05),transparent 70%)}
   .wrap{max-width:760px;margin:0 auto;padding:44px 24px 80px}
   .back{display:inline-flex;align-items:center;gap:7px;color:var(--text-2);font-size:14px;font-weight:500;margin-bottom:26px}
   .back:hover{color:var(--text);text-decoration:none}
@@ -36,21 +36,21 @@
   #drop .t{font-size:17px;font-weight:600;color:var(--text);margin-bottom:4px}
   #drop .s{font-size:13.5px}
   #file{display:none}
-  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-top:20px}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-top:20px;box-shadow:0 1px 2px rgba(16,24,40,.03)}
   tr{border-top:1px solid var(--border)}
   tr:first-child{border-top:none}
   td{padding:14px 18px;font-size:14px}
   td:first-child{color:var(--text-2);width:42%;white-space:nowrap;font-weight:500}
   td:last-child{font-family:var(--mono);font-size:13px}
   .pill{display:inline-block;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:700}
-  .v4{background:rgba(34,197,94,.12);color:var(--ok)}
+  .v4{background:var(--ok-dim);color:var(--ok)}
   .ok{color:var(--ok)}
   .warn{color:var(--warn)}
   .bad{color:var(--danger)}
   .muted{color:var(--text-2)}
   .note{display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-top:18px;color:var(--text-2);font-size:13.5px}
   .note .shield{font-size:18px;flex-shrink:0}
-  #err{display:none;background:rgba(239,68,68,.1);border:1px solid var(--danger);color:var(--danger);border-radius:12px;padding:16px 18px;margin-top:20px;font-size:14px}
+  #err{display:none;background:var(--danger-dim);border:1px solid var(--danger);color:var(--danger);border-radius:12px;padding:16px 18px;margin-top:20px;font-size:14px}
 </style>
 </head>
 <body>
