@@ -2226,6 +2226,7 @@ const modalDefs = {
   totp: {
     title: 'Add Two-Factor (TOTP)',
     fields: [
+      {id:'uri',     label:'Setup URI (otpauth://)', type:'text', helper:true, placeholder:'Paste an otpauth:// URI to auto-fill below'},
       {id:'issuer',  label:'Service name',   type:'text', required:true},
       {id:'account', label:'Account / Email',type:'text', required:true},
       {id:'secret',  label:'Secret (base32)',type:'text', required:true},
@@ -2280,7 +2281,7 @@ function openEntryModal(title, prefill) {
     <div class="field" style="margin-bottom:12px">
       <label>${f.label}${f.required?'':' <span style="color:var(--text-3);font-weight:400;text-transform:none">(optional)</span>'}</label>
       ${f.type==='textarea'
-        ?`<textarea id="mf-${f.id}" rows="${f.rows||4}" style="resize:vertical${f.mono?';font-family:var(--mono);font-size:12px;line-height:1.6':''}">${esc(pval(f))}</textarea>`
+        ?`<textarea id="mf-${f.id}" rows="${f.rows||4}" style="resize:vertical${f.mono?';font-family:var(--mono);font-size:12px;line-height:1.6':''}" placeholder="${f.placeholder||''}">${esc(pval(f))}</textarea>`
         : f.id==='password'
           ?`<div class="pass-wrap">
               <input id="mf-${f.id}" type="password" autocomplete="off" value="${esc(pval(f))}"/>
@@ -2288,12 +2289,50 @@ function openEntryModal(title, prefill) {
             </div>
             <div class="pw-strength" id="mf-password-strength">${'<div class="pw-strength-seg"></div>'.repeat(4)}</div>
             <div class="pw-strength-label" id="mf-password-strength-label"></div>`
-          :`<input id="mf-${f.id}" type="${f.type}" autocomplete="off" value="${esc(pval(f))}"/>`
+          :`<input id="mf-${f.id}" type="${f.type}" autocomplete="off" value="${esc(pval(f))}" placeholder="${f.placeholder||''}"/>`
       }
     </div>`).join('');
   document.getElementById('add-modal').classList.add('open');
   document.getElementById(`mf-${def.fields[0].id}`).focus();
+  // TOTP: a pasted otpauth:// setup URI auto-fills issuer/account/secret.
+  const uriEl = document.getElementById('mf-uri');
+  if (uriEl) {
+    uriEl.addEventListener('input', () => {
+      const parsed = parseOtpauthUri(uriEl.value.trim());
+      if (!parsed) return;
+      if (parsed.issuer)  document.getElementById('mf-issuer').value  = parsed.issuer;
+      if (parsed.account) document.getElementById('mf-account').value = parsed.account;
+      if (parsed.secret)  document.getElementById('mf-secret').value  = parsed.secret;
+    });
+  }
   updatePasswordStrength(document.getElementById('mf-password')?.value || '');
+}
+
+// Parse an `otpauth://totp/{label}?secret=...&issuer=...` setup URI (the
+// format QR codes from authenticator apps encode). Returns {issuer, account,
+// secret} or null. This is just a convenience to pre-fill the form — the
+// secret is still validated and stored by the existing Rust path.
+function parseOtpauthUri(uri) {
+  if (!/^otpauth:\/\/(totp|hotp)\//i.test(uri)) return null;
+  try {
+    const u = new URL(uri);
+    const label = decodeURIComponent(u.pathname.replace(/^\//,''));
+    const secret = u.searchParams.get('secret');
+    if (!secret) return null;
+    let issuer = u.searchParams.get('issuer') || '';
+    let account = '';
+    if (label.includes(':')) {
+      const [i, a] = label.split(/:(.*)/s);
+      if (!issuer) issuer = i;
+      account = a;
+    } else {
+      account = label;
+    }
+    // Many URIs duplicate the issuer inside the label ("Issuer:user"); keep
+    // only the account if the explicit issuer already matches the label part.
+    if (account.startsWith(issuer + ':')) account = account.slice(issuer.length + 1);
+    return { issuer, account, secret: secret.replace(/\s+/g,'').toUpperCase() };
+  } catch(e) { return null; }
 }
 
 // Simple heuristic — length + character-class diversity. Not a substitute
@@ -2341,6 +2380,7 @@ async function saveEntry() {
   errEl.textContent = '';
   const body = {};
   for (const f of def.fields) {
+    if (f.helper) continue; // helper fields (e.g. otpauth URI) aren't stored
     const el  = document.getElementById(`mf-${f.id}`);
     const val = el?.value?.trim();
     if (f.required && !val) { errEl.textContent=`${f.label} is required.`; el?.focus(); return; }

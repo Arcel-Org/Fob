@@ -549,6 +549,54 @@ async def check_max_security_profile(chrome):
         await cdp.close()
 
 
+async def check_otpauth_uri_import(chrome):
+    """Pasting an otpauth:// setup URI into the TOTP add form must auto-fill
+    issuer/account/secret, and saving must store the secret as raw bytes
+    (Rust shape) like the manual path."""
+    cdp = await chrome.open_page()
+    try:
+        await cdp.send("Page.navigate", {"url": "file:///root/Git/github/Fob/web/index.html"})
+        try: await cdp.wait_for_event("Page.loadEventFired", timeout=6)
+        except Exception: pass
+        await asyncio.sleep(0.8)
+        await create_vault(cdp)
+
+        # parseOtpauthUri should reject non-otpauth and accept a normal URI
+        bad = await cdp.eval("parseOtpauthUri('https://example.com/x') === null")
+        if not bad:
+            return False, "parseOtpauthUri accepted a non-otpauth URI"
+
+        await cdp.eval("document.querySelector('.nav-item[data-view=\"totp\"]').click(); 1;", await_promise=False)
+        await asyncio.sleep(0.2)
+        await cdp.eval("document.querySelector('[data-action=\"add\"]').click(); 1;", await_promise=False)
+        await asyncio.sleep(0.2)
+        await cdp.eval("""
+          (function(){
+            var u = document.getElementById('mf-uri');
+            u.value = 'otpauth://totp/Example:carol@corp.com?secret=JBSWY3DPEHPK3PXP&issuer=Example';
+            u.dispatchEvent(new Event('input', {bubbles:true}));
+          })(); 1;
+        """, await_promise=False)
+        await asyncio.sleep(0.2)
+        auto = await cdp.eval(
+            "JSON.stringify([document.getElementById('mf-issuer').value,"
+            "document.getElementById('mf-account').value,"
+            "document.getElementById('mf-secret').value])"
+        )
+        if json.loads(auto) != ["Example", "carol@corp.com", "JBSWY3DPEHPK3PXP"]:
+            return False, f"otpauth autofill produced wrong values: {auto}"
+
+        await cdp.eval("document.querySelector('[data-action=\"save-entry\"]').click(); 1;", await_promise=False)
+        await asyncio.sleep(0.4)
+        n = await cdp.eval("vaultJSON.totp.length")
+        isBytes = await cdp.eval("Array.isArray(vaultJSON.totp[0].secret)")
+        if n != 1 or not isBytes:
+            return False, f"expected 1 TOTP with byte-array secret, got count={n} isBytes={isBytes}"
+        return True, "otpauth URI auto-filled and saved TOTP with byte-array secret"
+    finally:
+        await cdp.close()
+
+
 CHECKS = [
     ("search filtering", check_search_filtering),
     ("TOTP countdown display", check_totp_countdown),
@@ -557,6 +605,7 @@ CHECKS = [
     ("v4 Argon2id vault round-trips in-browser", check_v4_roundtrip),
     ("passphrase policy enforced on create", check_passphrase_policy_enforced),
     ("max-security Argon2id profile selectable", check_max_security_profile),
+    ("otpauth:// URI auto-fill + save", check_otpauth_uri_import),
 ]
 
 
