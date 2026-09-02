@@ -1,4 +1,4 @@
-//! Host-OS integration shared by `fob-cli` and `fob-app`.
+//! Host-OS integration for the Fob CLI.
 //!
 //! Everything here talks to the operating system (spawning processes,
 //! enumerating block devices, touching the clipboard, writing files) —

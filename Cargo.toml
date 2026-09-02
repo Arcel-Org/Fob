@@ -3,7 +3,6 @@ members = [
     "crates/fob-core",
     "crates/fob-cli",
     "crates/fob-agent",
-    "crates/fob-app",
     "crates/fob-host",
     "crates/fob-wasm",
 ]
@@ -25,7 +24,7 @@ hmac = { version = "0.13" }
 sha1 = { version = "0.11" }
 pbkdf2 = { version = "0.13" }
 base64 = { version = "0.22" }
-argon2 = { version = "0.5.3", default-features = false, features = ["alloc"] }
+argon2 = { version = "0.6.0", default-features = false, features = ["alloc"] }
 ml-kem = { version = "0.3.2", default-features = false, features = ["alloc", "getrandom", "zeroize"] }
 x25519-dalek = { version = "3.0.0", default-features = false, features = ["static_secrets", "getrandom", "zeroize", "precomputed-tables"] }
 
@@ -50,10 +49,6 @@ clap = { version = "4", features = ["derive", "env"] }
 
 # Async runtime (for agent)
 tokio = { version = "1", features = ["full"] }
-
-# Native app shell (fob-app)
-tauri = { version = "2" }
-tauri-build = { version = "2" }
 
 # Misc
 base32 = { version = "0.5" }
