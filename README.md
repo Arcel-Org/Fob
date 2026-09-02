@@ -13,6 +13,13 @@ An encrypted vault that lives on a USB drive — passwords, TOTP codes, SSH keys
 
 </div>
 
+> **⚠️ In development — pre-1.0 (`0.1.x`).** Fob is under active development.
+> The CLI and the vault format are still stabilizing: **breaking changes may
+> land between releases** (including to the on-USB format). Keep a backup and
+> a [recovery key](#security) for anything you care about, and note that
+> `fob update` installs a specific pinned release, never an in-between `main`
+> build. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
+
 Fob turns any USB stick into a cryptographic security key. Plug it in, open `index.html`, and unlock with a passphrase — your credentials are available as a password manager, TOTP generator, and SSH key store. Unplug and everything locks. The browser vault runs the exact same Rust crypto as the CLI (compiled to WASM and embedded in the single HTML file), so a vault created on the command line opens in the browser and vice versa.
 
 <div align="center">

@@ -4,6 +4,10 @@ Fob is a security-focused project. We take vulnerabilities seriously and appreci
 
 ## Supported Versions
 
+Fob is pre-1.0 (`0.1.x`) and under active development — breaking changes may
+land between releases, so track the [CHANGELOG](CHANGELOG.md) and update via
+the pinned release channel (`fob update`), never an in-between `main` build.
+
 | Version | Supported          |
 | ------- | ------------------ |
 | 0.1.x   | :white_check_mark: |
