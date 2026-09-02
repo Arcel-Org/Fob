@@ -9,23 +9,44 @@ An encrypted vault that lives on a USB drive — passwords, TOTP codes, SSH keys
 [![CI](https://github.com/Arcel-Org/Fob/actions/workflows/ci.yml/badge.svg)](https://github.com/Arcel-Org/Fob/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
 [![Rust 1.88+](https://img.shields.io/badge/rust-1.88+-orange.svg)](#building-from-source)
+[![GitHub Pages](https://img.shields.io/badge/web-fob.site-blue.svg)](https://arcel-org.github.io/Fob/)
+
+</div>
+
+Fob turns any USB stick into a cryptographic security key. Plug it in, open `index.html`, and unlock with a passphrase — your credentials are available as a password manager, TOTP generator, and SSH key store. Unplug and everything locks. The browser vault runs the exact same Rust crypto as the CLI (compiled to WASM and embedded in the single HTML file), so a vault created on the command line opens in the browser and vice versa.
+
+<div align="center">
+
+![The Fob browser vault, locked](docs/screenshots/vault-lock.png)
+
+*The vault lives on the USB drive — open `index.html`, enter your passphrase.*
 
 </div>
 
 ---
 
-Fob turns any USB stick into a cryptographic security key. Plug it in, open `index.html`, and unlock with a passphrase — your credentials are available as a password manager, TOTP generator, and SSH key store. Unplug and everything locks. The browser vault runs the exact same Rust crypto as the CLI (compiled to WASM and embedded in the single HTML file), so a vault created on the command line opens in the browser and vice versa.
+## Screenshots
+
+<div align="center">
+
+| | |
+|---|---|
+| ![Unlocked vault](docs/screenshots/vault-main.png) | ![Landing page](docs/screenshots/site-landing.png) |
+| *The unlocked vault — passwords, TOTP codes, SSH keys, notes* | *The Fob landing page (arcel-org.github.io/Fob)* |
+
+</div>
 
 ---
 
 ## What's in the vault
 
-- **Passwords** — store, generate, and auto-copy credentials
-- **TOTP** — built-in two-factor code generation with live countdown
-- **SSH keys** — import existing keys from the CLI or browser vault; unlocked keys are exposed via a local SSH agent socket, compatible with any SSH client (spawned automatically by the CLI on unlock — passphrase-protected keys must have that passphrase stripped first, e.g. `ssh-keygen -p -N ""`)
+- **Passwords** — store, generate (with strength meter), and auto-copy credentials
+- **TOTP** — built-in two-factor code generation with live countdown; add by secret or by pasting an `otpauth://` setup URI
+- **SSH keys** — import Ed25519/RSA/ECDSA keys; unlocked keys are exposed via a local SSH agent socket, compatible with any SSH client (spawned automatically by the CLI — passphrase-protected keys must have that passphrase stripped first, e.g. `ssh-keygen -p -N ""`)
 - **Secure notes** — encrypted free-text entries
 - **Plausible deniability** — decoy vault slot with realistic fake data; duress slot that destroys the vault silently
-- **Browser vault** — a zero-dependency HTML file that runs entirely offline, using the exact same encrypted vault format as the CLI — either can create, open, or update a vault the other made
+- **Browser vault** — a single self-contained HTML file that runs entirely offline, using the exact same encrypted vault format as the CLI — either can create, open, or update a vault the other made
+- **Passphrase policy** — length, entropy and blocklist checks, enforced identically in the browser and CLI from shared Rust code; optional **max-security Argon2id** profile (128 MiB / 4 passes / 8 lanes)
 
 ---
 
@@ -132,7 +153,8 @@ python3 web/tests/browser_interaction_test.py              # headless-chromium c
 The browser-vault check drives a real headless Chromium instance (requires
 `chromium` and Python's `websockets` package) through the actual UI — search
 filtering, the TOTP countdown, auto-lock on inactivity, v4 round-tripping,
-and entry-list rendering/scrolling with many entries.
+the max-security profile, otpauth:// URI import, passphrase policy, and
+entry-list rendering/scrolling with many entries.
 
 Automated tests cover the logic and rendering paths; they are not a
 substitute for a real person using the app. See `USABILITY_TESTING.md` for a
@@ -148,17 +170,18 @@ fob/
 │   ├── fob-core/       # cryptography and vault format — no I/O, pure logic
 │   ├── fob-wasm/       # browser bindings for fob-core (compiled to wasm32)
 │   ├── fob-cli/        # install/format/status/recover — USB provisioning only
-│   ├── fob-host/       # host-OS integration shared by the CLI and app
+│   ├── fob-host/       # host-OS integration for the CLI
 │   └── fob-agent/      # SSH agent daemon
 ├── install/
 │   └── install.sh      # one-line installer
-├── site/               # GitHub Pages front door: install + hash, version check,
-│                       # header inspector (public metadata only)
-└── web/
-    ├── index.template.html # browser vault source (WASM crypto inlined at build)
-    ├── index.html          # generated self-contained browser vault (shipped to USB)
-    ├── build_wasm.sh       # compile fob-wasm → inline into index.html / inspector
-    └── tests/              # headless-chromium interaction checks for index.html
+├── site/               # GitHub Pages front door: landing page + header inspector
+│                       # (public metadata only, never decrypts)
+├── web/
+│   ├── index.template.html # browser vault source (WASM crypto inlined at build)
+│   ├── index.html          # generated self-contained browser vault (shipped to USB)
+│   ├── build_wasm.sh       # compile fob-wasm → inline into index.html / inspector
+│   └── tests/              # headless-chromium interaction checks for index.html
+└── docs/screenshots/   # README screenshots (captured from the real UI)
 ```
 
 The `fob` command is intentionally small: it only installs/updates and does
