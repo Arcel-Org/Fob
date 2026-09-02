@@ -3,14 +3,14 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # curl -fsSL https://raw.githubusercontent.com/Arcel-Org/Fob/main/install/install.sh | sh
 #
-# Downloads the fob + fob-agent binaries and verifies them. Falls back to
-# building from source if no release is published yet.
+# Downloads the fob binary and verifies it. Falls back to building from
+# source if no release is published yet.
 #
 # Flags:
 #   --version=vX.Y.Z   install a specific release (default: latest)
 #   --no-path          skip adding ~/.fob/bin to your shell rc
 #   --local=/path      use a locally built binary instead of downloading
-#   --uninstall        remove Fob's installed binaries
+#   --uninstall        remove Fob's installed binary
 #   --help, -h         show this help
 # ──────────────────────────────────────────────────────────────────────────────
 set -eu
@@ -34,8 +34,7 @@ Flags:
   --version=vX.Y.Z   install a specific release (default: latest)
   --no-path          skip adding ~/.fob/bin to your shell rc
   --local=/path      use a locally built binary instead of downloading
-                     (looks for a sibling fob-agent binary next to it)
-  --uninstall        remove Fob's installed binaries from ~/.fob/bin
+  --uninstall        remove Fob's installed binary from ~/.fob/bin
   --help, -h         show this help and exit
 
 Downloaded releases are verified against the published SHA256SUMS before
@@ -79,14 +78,14 @@ fi
 
 # ── uninstall ─────────────────────────────────────────────────────────────────
 if [ "$DO_UNINSTALL" = "1" ]; then
-  if [ ! -e "${FOB_INSTALL_DIR}/fob" ] && [ ! -e "${FOB_INSTALL_DIR}/fob-agent" ]; then
+  if [ ! -e "${FOB_INSTALL_DIR}/fob" ]; then
     say "Nothing installed at ${FOB_INSTALL_DIR} — nothing to do."
     exit 0
   fi
-  rm -f "${FOB_INSTALL_DIR}/fob" "${FOB_INSTALL_DIR}/fob-agent"
+  rm -f "${FOB_INSTALL_DIR}/fob"
   rmdir "${FOB_INSTALL_DIR}" 2>/dev/null || true
   say "Removed Fob from ${FOB_INSTALL_DIR}."
-  say "Your vault(s) on USB drives are untouched — only the installed binaries were removed."
+  say "Your vault(s) on USB drives are untouched — only the installed binary was removed."
   say "If you added ${FOB_INSTALL_DIR} to PATH in your shell rc file, remove that line manually."
   exit 0
 fi
@@ -129,14 +128,12 @@ if [ -n "$LOCAL_BIN" ]; then
   VERSION="local"
 elif [ -f "Cargo.toml" ] && [ -z "$VERSION" ]; then
   # Running from inside the repo — build from source directly.
-  # Both binaries: fob-agent must sit next to fob for the SSH agent to work.
   if ! command -v cargo >/dev/null 2>&1; then
     die "cargo not found. Install Rust from https://rustup.rs and retry."
   fi
   say "Building from source..."
-  cargo build --release -p fob-cli -p fob-agent 2>&1 | tail -3
+  cargo build --release -p fob-cli 2>&1 | tail -3
   [ -f "target/release/fob" ] || die "Build failed."
-  [ -f "target/release/fob-agent" ] || die "Build failed (fob-agent)."
   LOCAL_BIN="$(pwd)/target/release/fob"
   VERSION="local"
 elif [ -z "$VERSION" ]; then
@@ -171,13 +168,6 @@ trap 'rm -rf "$TMPDIR_WORK"' EXIT
 
 if [ -n "$LOCAL_BIN" ]; then
   cp "$LOCAL_BIN" "${TMPDIR_WORK}/fob"
-  # fob-agent must ship alongside fob — look for it next to the given binary.
-  LOCAL_AGENT="$(dirname "$LOCAL_BIN")/fob-agent"
-  if [ -x "$LOCAL_AGENT" ]; then
-    cp "$LOCAL_AGENT" "${TMPDIR_WORK}/fob-agent"
-  else
-    say "WARNING: no fob-agent found next to $LOCAL_BIN — SSH agent support will be unavailable."
-  fi
 else
   ARTIFACT="fob-${VERSION}-${PLATFORM}.tar.gz"
   ARTIFACT_URL="${FOB_BASE_URL}/${VERSION}/${ARTIFACT}"
@@ -231,16 +221,11 @@ fi
 
 [ -f "${TMPDIR_WORK}/fob" ] || die "Binary not found."
 chmod 755 "${TMPDIR_WORK}/fob"
-[ -f "${TMPDIR_WORK}/fob-agent" ] && chmod 755 "${TMPDIR_WORK}/fob-agent"
 
 # ── install ───────────────────────────────────────────────────────────────────
 mkdir -p "$FOB_INSTALL_DIR"
 cp "${TMPDIR_WORK}/fob" "${FOB_INSTALL_DIR}/fob"
 chmod 755 "${FOB_INSTALL_DIR}/fob"
-if [ -f "${TMPDIR_WORK}/fob-agent" ]; then
-  cp "${TMPDIR_WORK}/fob-agent" "${FOB_INSTALL_DIR}/fob-agent"
-  chmod 755 "${FOB_INSTALL_DIR}/fob-agent"
-fi
 say "Installed to: ${FOB_INSTALL_DIR}/fob"
 
 # ── PATH setup ────────────────────────────────────────────────────────────────

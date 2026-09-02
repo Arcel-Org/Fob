@@ -29,8 +29,9 @@
    you can get them — password-manager and SSH-key concepts land very
    differently depending on background.
 2. Give them **no instructions beyond "set up and use this password
-   manager"** — don't explain the wizard, don't explain slots/decoy/duress
-   terminology, don't tell them where the "generate password" button is.
+   manager"** — don't explain the vault creation, don't explain
+   slots/decoy/duress terminology, don't tell them where the "generate
+   password" button is.
    The point is to find out if they can find it themselves.
 3. Sit where you can see their screen and their face, but resist narrating
    or helping. Time each task loosely (a stopwatch on your phone is fine —
@@ -38,26 +39,27 @@
 4. Fill in the blanks under each task as you go. There's a free-form
    "Confusion / friction notes" line after every task — use it even
    (especially) when the task technically succeeded but wasn't obvious.
-5. Run **both** interfaces, ideally with different testers (or the same
-   tester on different days) so the second run isn't biased by having
-   already learned the vault's concepts on the first.
+5. Run the **browser vault** as the primary interface — it is where all
+   day-to-day browsing/editing happens. Also run the **CLI** for the setup
+   path (`fob format` on a USB drive), ideally with different testers (or
+   the same tester on different days) so the second run isn't biased by
+   having already learned the vault's concepts on the first.
 
 **Session info**
 
 - Date: ______________________  Tester: ______________________
 - Tester's self-rated familiarity with password managers (1–5): _____
 - Tester's self-rated familiarity with SSH / terminal use (1–5): _____
-- Interface tested this session:  ☐ CLI (TUI)   ☐ Browser vault (`index.html`)
+- Interface tested this session:  ☐ Browser vault (`index.html`)   ☐ CLI (`fob format` / `fob status`)
 - Build/version tested: ______________________
 
 ---
 
 ## Setup for the person running the session (not the tester)
 
-- **CLI**: build `fob` and `fob-agent` (`cargo build --release -p fob-cli -p
-  fob-agent`, both binaries in the same directory), have a real spare USB
-  drive plugged in (or one it's OK to erase — the wizard will offer to wipe
-  it).
+- **CLI**: build `fob` (`cargo build --release -p fob-cli`), have a real
+  spare USB drive plugged in (or one it's OK to erase — `fob format` will
+  wipe it).
 - **Browser vault**: have `web/index.html` reachable — opening it directly
   as a `file://` URL is the real-world case most users will hit, so test
   that path, not a localhost dev server, unless you're specifically also
@@ -84,7 +86,7 @@ starting from nothing (no existing vault).
 - Did they understand what a "passphrase" was being asked for here, as
   distinct from a website password? Y / N
 - CLI only: did they correctly identify which USB drive to pick if more
-  than one was plugged in?
+  than one was plugged in, and did the format/erase warning read clearly?
 - Did they read (or skip past) any warning about data being erased?
 - Time to a usable, unlocked vault: ______
 - Confusion / friction notes:
@@ -135,8 +137,9 @@ throwaway keypair generated just for this test (`ssh-keygen -t ed25519 -f
 /tmp/usability-test-key -N ""` — do **not** use anyone's real key).
 
 - Did they understand which file/field was the public key vs. private key?
-- CLI only: after import, did they notice anything indicating the key is
-  now available to an SSH agent (or did they not look/care)?
+- CLI only (SSH agent path): after import, did they notice anything
+  indicating the key is now available to an SSH agent (or did they not
+  look/care)?
 - Did anything in the flow suggest their key had a passphrase and needed it
   stripped first, if they tried a passphrase-protected key?
 - Confusion / friction notes:

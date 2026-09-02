@@ -1,15 +1,4 @@
 # cargo-audit config. See CONTRIBUTING.md before adding an entry here —
 # every ignore must be justified, not just a way to silence CI.
 [advisories]
-ignore = [
-    # RUSTSEC-2023-0071 (Marvin Attack timing side-channel in the `rsa`
-    # crate, no fixed version available upstream): `rsa` is resolved in
-    # Cargo.lock only because it's one of ssh-key's optional dependencies —
-    # we deliberately do NOT enable ssh-key's "rsa" feature (see
-    # crates/fob-agent/Cargo.toml), so the crate is never actually compiled
-    # or linked into any Fob binary. Verified with `cargo tree -i rsa`
-    # (zero reverse dependencies under our actual feature set) and by
-    # confirming "Compiling rsa" never appears in a clean build.
-    # Re-check this the moment ssh-key's "rsa" feature is ever enabled again.
-    "RUSTSEC-2023-0071",
-]
+ignore = []

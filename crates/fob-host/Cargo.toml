@@ -5,11 +5,8 @@ edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Host-OS integration for fob-cli: USB device enumeration, SSH agent process management, clipboard, atomic file writes"
+description = "Host-OS integration for fob-cli: USB device enumeration, clipboard, atomic file writes"
 
 [dependencies]
 anyhow = { workspace = true }
-fob-core = { workspace = true }
-serde_json = { workspace = true }
-directories = { workspace = true }
 arboard = { workspace = true }

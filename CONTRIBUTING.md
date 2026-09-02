@@ -26,10 +26,10 @@ cargo clippy --all-targets -- -D warnings
 ## Architecture rule
 
 ```
-fob-core  ← no I/O, pure crypto logic, fully testable
-fob-cli   ← install/format/status/recover: USB device management, calls fob-core
-fob-agent ← SSH agent daemon, calls fob-core
-fob-wasm  ← browser bindings for fob-core, compiled to wasm32
+fob-core ← no I/O, pure crypto logic, fully testable
+fob-cli  ← install/format/status/recover: USB device management, calls fob-core
+fob-host ← host-OS integration for the CLI (device, clipboard, fs)
+fob-wasm ← browser bindings for fob-core, compiled to wasm32
 ```
 
 Do not add I/O to `fob-core`. Do not add cryptographic logic to `fob-cli`.

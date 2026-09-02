@@ -2,7 +2,6 @@
 members = [
     "crates/fob-core",
     "crates/fob-cli",
-    "crates/fob-agent",
     "crates/fob-host",
     "crates/fob-wasm",
 ]
@@ -47,13 +46,9 @@ anyhow = { version = "1" }
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
 
-# Async runtime (for agent)
-tokio = { version = "1", features = ["full"] }
-
 # Misc
 base32 = { version = "0.5" }
 arboard = { version = "3" }
-directories = { version = "6" }
 
 # Internal crates
 fob-core = { path = "crates/fob-core" }

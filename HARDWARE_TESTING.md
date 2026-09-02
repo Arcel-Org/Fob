@@ -5,8 +5,7 @@
 > (147 unit/integration tests, clippy, fmt, audit) has executed inside a
 > sandboxed container with no real block devices, no real `diskutil`/`udev`,
 > and no real USB controller. That means the entire device-detection layer
-> (`crates/fob-cli/src/device.rs`), the format/erase path, and the SSH agent's
-> interaction with a real `ssh` client are **unverified on real hardware**.
+> (`crates/fob-host/src/device/`) and the format/erase path are **unverified on real hardware**.
 > A "fresh audit pass" or code review cannot substitute for the checks below —
 > someone with physical USB drives and a keyboard needs to run them.
 >
@@ -22,10 +21,7 @@
   ```
   cargo build --release --workspace
   ```
-  Confirm `fob` and `fob-agent` end up in the same directory (`ssh_agent.rs`
-  finds `fob-agent` as a sibling of the running `fob` binary — if you copy
-  `fob` somewhere without `fob-agent` next to it, the SSH agent tests below
-  will silently report "unavailable" instead of testing anything).
+  The `fob` binary lands at `target/release/fob`.
 - [ ] macOS: a machine actually running macOS (Intel and Apple Silicon if you
   have both — Apple Silicon Macs are far more likely to have USB-C/Thunderbolt
   NVMe enclosures instead of classic USB-A flash drives).
@@ -48,12 +44,6 @@
   - [ ] A drive with **two partitions** on it (e.g. a small first partition
     plus a larger second one — an old bootable-USB-installer stick works, or
     partition one yourself with `diskutil` / `fdisk`).
-- [ ] A real `ssh` client and `ssh-keygen`/`ssh-add` available (OpenSSH,
-  not just what's vendored into an IDE) for § 10.
-- [ ] A second person or second machine's `sshd` (or a local `sshd` on
-  a non-standard port) to actually attempt an authenticated connection
-  against, not just `ssh-add -l`.
-
 ---
 
 ## 1. Fresh drive setup
@@ -63,7 +53,7 @@ prerequisite list (the space-in-label one and the plain one).
 
 - [ ] Insert a **completely blank/unpartitioned** drive (if you can get one
   into that state — `diskutil eraseDisk` with "Free Space" scheme on macOS,
-  or `wipefs -a /dev/sdX` on Linux). Run `fob devices`.
+  or `wipefs -a /dev/sdX` on Linux). Run `fob status`.
   - [ ] **Expected-but-unverified**: the current `device.rs` logic finds
     drives by scanning currently-mounted volumes (`/Volumes` on macOS,
     `/proc/mounts` on Linux). A truly blank, unformatted disk has no mount
@@ -72,13 +62,13 @@ prerequisite list (the space-in-label one and the plain one).
     If it doesn't show up, that's a real gap to file, not a test failure to
     paper over.
 - [ ] Insert a drive already formatted exFAT/FAT32 but with **no Fob vault
-  on it** (blank data drive). Run `fob devices` — confirm it's listed, size
+  on it** (blank data drive). Run `fob status` — confirm it's listed, size
   is correct (compare to what the OS itself reports, e.g. Finder "Get Info"
   or `lsblk -b`), and `[vault present]` is **absent**.
-- [ ] Run `fob` (or `fob setup`) against that drive. Walk the setup wizard:
-  set a master passphrase, confirm it, optionally set a decoy and duress
-  passphrase. Let it format + initialize.
-- [ ] Eject and re-insert the drive. Run `fob devices` again — confirm
+- [ ] Run `fob format <device>` against that drive. Follow the prompts: set and confirm a master passphrase, optionally a
+decoy and duress passphrase and a post-quantum recovery key. Let it format
++ initialize.
+- [ ] Eject and re-insert the drive. Run `fob status` again — confirm
   `[vault present]` is now shown, and the reported size didn't change
   (formatting shouldn't silently shrink/grow the reported capacity by more
   than filesystem overhead).
@@ -92,12 +82,12 @@ prerequisite list (the space-in-label one and the plain one).
 ## 2. Existing-vault detection
 
 - [ ] With the drive from § 1 still having its vault, unplug it, plug it
-  into a **different USB port**, and re-run `fob devices` /
-  `fob unlock`. Confirm detection doesn't depend on port/bus ordering.
+  into a **different USB port**, and re-run `fob status`. Confirm detection doesn't depend on port/bus ordering.
 - [ ] Reboot the test machine with the vault drive already inserted, then
-  launch `fob` — confirm it's detected on a "cold" boot, not just hot-plug.
+  run `fob status` — confirm it's detected on a "cold" boot, not just
+  hot-plug.
 - [ ] Rename the volume label (via OS tools) after the vault exists, re-run
-  `fob devices` — confirm the vault is still found (vault detection should
+  `fob status` — confirm the vault is still found (vault detection should
   key off `vault.fob` file presence, not volume name).
 
 ---
@@ -164,9 +154,9 @@ that silently no-ops is worse than not having one.
     `sync_all()` — confirm that claim holds on your actual filesystem/drive
     combination, since exFAT/FUSE-backed mounts and some USB bridge chips
     are known to lie about write completion.
-- [ ] Confirm trying to `fob unlock` the wiped drive afterward fails
-  cleanly (corrupt-vault error, not a panic) rather than pretending to
-  succeed.
+- [ ] Confirm trying to open the wiped drive in the browser vault afterward
+  fails cleanly (corrupt-vault error, not a panic) rather than pretending
+  to succeed.
 - [ ] Repeat this whole section on both macOS and Linux — the wipe path is
   shared `fob-core` code, but the underlying filesystem driver (exFAT
   implementations differ between the two OSes) is not, and this is exactly
@@ -178,11 +168,11 @@ that silently no-ops is worse than not having one.
 
 - [ ] Plug in **at least two** Fob-formatted drives (different passphrases
   on each) simultaneously, plus one plain USB drive with unrelated data.
-  Run `fob devices` — confirm all three are listed, sizes and vault-present
+  Run `fob status` — confirm all three are listed, sizes and vault-present
   flags are correct **per drive**, and none are confused with each other.
-- [ ] Run `fob unlock` and pick each vault drive in turn (by whatever
-  selector the picker UI offers) — confirm the right vault's data comes up
-  each time, not a stale selection from a previous run.
+- [ ] Open the browser vault (`index.html` on the drive) for each vault drive
+  in turn — confirm the right vault's data comes up each time, not a stale
+  selection from a previous run.
 - [ ] With two vault drives plugged in, unlock one, then **while still
   unlocked**, unplug the *other* (non-active) drive. Confirm nothing about
   the active session is disturbed.
@@ -199,11 +189,11 @@ that silently no-ops is worse than not having one.
 Do these deliberately, expecting some data loss on the *drive*, but no
 crash-with-corrupted-state on the *host*.
 
-- [ ] During `fob setup`'s format step, physically yank the drive partway
+- [ ] During `fob format`'s format step, physically yank the drive partway
   through. Re-insert it. Confirm `fob` doesn't hang or panic, and correctly
   reports either "no valid Fob drive" or offers to (re-)format rather than
   claiming success.
-- [ ] While the dashboard is open and you're editing/adding an entry
+- [ ] While the browser vault is open and you're editing/adding an entry
   (mid-keystroke, before an explicit save if the UI has an explicit save
   step — otherwise right as you hit save), yank the drive. Confirm:
   - [ ] `fob` doesn't panic — it should surface an I/O error.
@@ -214,18 +204,12 @@ crash-with-corrupted-state on the *host*.
     prevent partial writes via a temp-file-then-rename; confirm that
     actually holds when the rename itself can't complete because the
     device disappeared mid-rename.)
-- [ ] Yank the drive while `fob-agent` is running with keys loaded from it
-  (see § 10). Confirm the agent process and its socket get cleaned up
-  (check `ps` and that the socket file is gone / stale-but-harmless) rather
-  than leaving a zombie agent holding decrypted keys with no way to revoke
-  them short of a reboot.
-
 ---
 
 ## 8. Drives with pre-existing non-Fob data
 
 For each sub-case, plug the drive in with real, pre-existing data on it
-(not freshly formatted) and run `fob devices` / attempt setup, then confirm
+(not freshly formatted) and run `fob status` / attempt setup, then confirm
 the reported name/size look right and that `fob` does **not** touch the
 drive's data without an explicit, confirmed format step.
 
@@ -233,16 +217,15 @@ drive's data without an explicit, confirmed format step.
   `Untitled 1`, or a Windows-default name). On Linux, `/proc/mounts`
   octal-escapes spaces in mount paths as `\040` (and other punctuation
   similarly) — this was a real bug (found by source review, now fixed:
-  `find_mount_point` decodes these escapes before use) — confirm `fob
-  devices` shows the **actual** un-escaped path (e.g. `/media/you/FOB
+  `find_mount_point` decodes these escapes before use) — confirm `fob status` shows the **actual** un-escaped path (e.g. `/media/you/FOB
   BACKUP`), not a literal `\040` in the displayed path, and that
   `has_fob_vault`/any file access against that drive actually reaches the
   real directory rather than a mangled one. If the path shown still
   contains a literal backslash-and-digits sequence, or `fob` still reports
   the drive as vault-less when it demonstrably has a `vault.fob` on it, the
   fix didn't hold up against real `/proc/mounts` output — file it.
-- [ ] **8.2 — FAT32 with no volume label** (blank/`NO NAME`). Confirm `fob
-  devices` shows *something* sensible for the name (a fallback like the
+- [ ] **8.2 — FAT32 with no volume label** (blank/`NO NAME`). Confirm `fob status`
+  shows *something* sensible for the name (a fallback like the
   disk identifier), not a blank row in the list.
 - [ ] **8.3 — macOS-native filesystem** (APFS or HFS+, *not* exFAT) with
   real data on it, e.g. a Time Machine drive or an old HFS+ backup disk.
@@ -256,7 +239,7 @@ drive's data without an explicit, confirmed format step.
     format step, and does not corrupt the existing data merely by *listing*
     it.
 - [ ] **8.4 — external SSD / USB-NVMe enclosure**, pre-existing data. On
-  Linux specifically, check whether it **appears** in `fob devices` at all:
+  Linux specifically, check whether it **appears** in `fob status` at all:
   many USB-SATA/NVMe bridge chips report `removable = 0` in
   `/sys/block/<dev>/removable` — Linux enumeration now also accepts a
   device whose sysfs symlink resolves through a USB bus (a real bug found
@@ -302,43 +285,7 @@ drive's data without an explicit, confirmed format step.
   the failure instead of retrying forever or panicking.
 - [ ] (Linux) Attempt to read `/proc/mounts` / `/sys/block` in a locked-down
   environment (e.g. a restrictive container or a user without the
-  permissions your distro normally grants for those paths) — confirm `fob
-  devices` degrades to "no drives found" rather than crashing.
-
----
-
-## 10. SSH agent against a real `ssh` client
-
-- [ ] Unlock a vault containing at least one real SSH key entry (generate a
-  fresh test keypair with `ssh-keygen` specifically for this — do not use a
-  key with real access to anything).
-- [ ] Confirm `fob-agent` is running (`ps aux | grep fob-agent`) and its
-  Unix socket exists at the path `fob` reports/uses
-  (`session_socket_path()` — under `$XDG_RUNTIME_DIR` on Linux, a private
-  temp subdir on macOS). Check the socket's permissions are private
-  (0600/owner-only) with `ls -l`.
-- [ ] `export SSH_AUTH_SOCK=<that path>` in a separate terminal and run:
-  - [ ] `ssh-add -l` — confirms the real OpenSSH client can talk the wire
-    protocol `fob-agent` implements, and lists the expected key
-    fingerprint(s).
-  - [ ] `ssh-add -L` — confirm the public key output round-trips
-    (matches the actual public key for that private key).
-  - [ ] Attempt a real authenticated `ssh` connection to a test server (or
-    local `sshd` on a scratch port) using that identity — confirm the
-    handshake actually succeeds end-to-end, not just that the agent
-    *lists* a key.
-- [ ] Lock the vault / exit `fob` — confirm the agent process exits and the
-  socket disappears (`ls` the socket path again — should be gone), and that
-  a subsequent `ssh-add -l` against the now-stale `SSH_AUTH_SOCK` fails
-  cleanly ("Could not open a connection...") rather than hanging.
-- [ ] Kill `fob` forcibly (`kill -9` on the main `fob` process, not a
-  graceful quit) with the agent running. Confirm the agent doesn't become
-  an orphaned process holding decrypted key material indefinitely — check
-  `ps` a few seconds later.
-- [ ] Run two `fob` sessions concurrently (two different vault drives, two
-  terminals) — confirm each gets its own agent socket (PID-scoped path) and
-  `ssh-add -l` against each shows only that session's keys, not a merged or
-  crossed set.
+  permissions your distro normally grants for those paths) — confirm `fob status` degrades to "no drives found" rather than crashing.
 
 ---
 

@@ -68,21 +68,18 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-
 
-      # fob-agent ships alongside fob — the CLI spawns it as a sibling binary
-      # for SSH agent support, so both must land in every release artifact.
       - name: Build (cross)
         if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }} -p fob-cli -p fob-agent
+        run: cross build --release --target ${{ matrix.target }} -p fob-cli
 
       - name: Build (cargo)
         if: "!matrix.cross"
-        run: cargo build --release --target ${{ matrix.target }} -p fob-cli -p fob-agent
+        run: cargo build --release --target ${{ matrix.target }} -p fob-cli
 
       - name: Strip binaries (Linux/macOS)
         if: matrix.strip
         run: |
           strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}
-          strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}-agent
 
       - name: Package artifact
         shell: bash
@@ -90,8 +87,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME}"
           ARTIFACT="${BINARY_NAME}-${VERSION}-${{ matrix.target }}.tar.gz"
           cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} .
-          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}-agent .
-          tar czf "${ARTIFACT}" "${{ env.BINARY_NAME }}" "${{ env.BINARY_NAME }}-agent"
+          tar czf "${ARTIFACT}" "${{ env.BINARY_NAME }}"
           echo "ARTIFACT=${ARTIFACT}" >> "$GITHUB_ENV"
 
       - name: Upload artifact

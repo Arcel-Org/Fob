@@ -1,6 +1,6 @@
-// Integration test — exercises the exact save/reload sequence
-// DashboardState::save() performs (fob-cli's tui/state.rs), using only
-// fob-core's public API directly since fob-cli has no lib target to import.
+// Integration test — exercises the exact save/reload sequence the CLI's
+// format path performs, using only fob-core's public API directly since
+// fob-cli has no lib target to import.
 use fob_core::format::DEFAULT_VAULT_SIZE;
 use fob_core::types::{NoteEntry, PasswordEntry, SshKeyEntry, TotpEntry};
 use fob_core::vault::{unlock_vault, SlotKind, VaultFile, VaultInitParams};

@@ -42,7 +42,7 @@ Fob turns any USB stick into a cryptographic security key. Plug it in, open `ind
 
 - **Passwords** — store, generate (with strength meter), and auto-copy credentials
 - **TOTP** — built-in two-factor code generation with live countdown; add by secret or by pasting an `otpauth://` setup URI
-- **SSH keys** — import Ed25519/RSA/ECDSA keys; unlocked keys are exposed via a local SSH agent socket, compatible with any SSH client (spawned automatically by the CLI — passphrase-protected keys must have that passphrase stripped first, e.g. `ssh-keygen -p -N ""`)
+- **SSH keys** — import Ed25519/RSA/ECDSA keys with fingerprints; store and manage them in the vault (passphrase-protected keys must have that passphrase stripped first, e.g. `ssh-keygen -p -N ""`)
 - **Secure notes** — encrypted free-text entries
 - **Plausible deniability** — decoy vault slot with realistic fake data; duress slot that destroys the vault silently
 - **Browser vault** — a single self-contained HTML file that runs entirely offline, using the exact same encrypted vault format as the CLI — either can create, open, or update a vault the other made
@@ -57,7 +57,7 @@ Fob turns any USB stick into a cryptographic security key. Plug it in, open `ind
 There is **one crypto implementation** — `fob-core` (Rust) — used everywhere.
 The browser vault doesn't hand-write WebCrypto; it embeds `fob-core` compiled
 to `wasm32-unknown-unknown` (via the `fob-wasm` crate) as a single
-self-contained HTML file, so the CLI, agent, and browser all run identical
+self-contained HTML file, so the CLI and browser all run identical
 code. Every vault is format v4 with Argon2id by default, plus an optional
 hybrid post-quantum recovery key. v3 (PBKDF2) vaults written by older versions
 remain readable.
@@ -92,10 +92,10 @@ All cryptographic operations live in `fob-core`, which has no filesystem or netw
 
 ### Known limitations
 
-- **RSA SSH keys are stored but not signed.** The `rsa` crate used by our SSH library carries [RUSTSEC-2023-0071](https://rustsec.org/advisories/RUSTSEC-2023-0071) (a timing side-channel), with no fixed version available upstream. RSA key *entries* can still be stored and viewed in the vault, but the SSH agent won't load them for signing. Use Ed25519 (the default for new keys) instead.
+- **RSA SSH keys are stored and fingerprinted, but not exposed for signing.** The `rsa` crate (the only Rust RSA signing path) carries [RUSTSEC-2023-0071](https://rustsec.org/advisories/RUSTSEC-2023-0071) (a timing side-channel) with no fixed version upstream, so Fob does not depend on it at all. RSA key *entries* can still be stored, viewed and fingerprinted. Use Ed25519 (the default for new keys) where possible.
 - **Imported SSH keys must not be passphrase-protected** — the vault passphrase is already the protection layer; strip a key's own passphrase before importing it (`ssh-keygen -p -N ""`).
 - **The duress wipe overwrites the vault file's logical content, not necessarily its physical storage.** On a copy-on-write filesystem (e.g. macOS APFS) or an SSD doing wear-leveling internally, an in-place overwrite can leave the pre-wipe bytes recoverable from other physical blocks via forensic tools, filesystem snapshots, or drive firmware — the OS-level guarantee "this file's contents are now random bytes" does not extend to "the old bytes are physically gone." If your threat model includes forensic recovery of the underlying storage medium, don't rely on the duress wipe alone; treat it as closing off the easy/logical recovery path, not a physical-media guarantee.
-- **The browser vault can only wipe the actual `vault.fob` file if it was opened via the native file picker in a Chromium browser** (Chrome, Edge, Opera — anything supporting the File System Access API). Opening the vault by drag-and-drop, via a plain `<input type=file>` fallback, or via the automatic same-directory load on a `file://` page gives the page no writable handle to the original file at all — browsers don't allow arbitrary local file writes without one. In those cases (and always in Firefox/Safari, which don't implement the File System Access API), a duress passphrase still clears the browser's own IndexedDB cache, but the `vault.fob` file on the USB drive itself is left completely untouched. If you rely on the duress feature, use the CLI (`fob`), which always wipes the real file, or confirm you opened the browser vault through its file picker (not drag-and-drop) in a supported browser.
+- **The browser vault can only wipe the actual `vault.fob` file if it was opened via the native file picker in a Chromium browser** (Chrome, Edge, Opera — anything supporting the File System Access API). Opening the vault by drag-and-drop, via a plain `<input type=file>` fallback, or via the automatic same-directory load on a `file://` page gives the page no writable handle to the original file at all — browsers don't allow arbitrary local file writes without one. In those cases (and always in Firefox/Safari, which don't implement the File System Access API), a duress passphrase still clears the browser's own IndexedDB cache, but the `vault.fob` file on the USB drive itself is left completely untouched. The CLI's duress-wipe path (`fob-core::vault::unlock_vault_with_duress_wipe`) can wipe the real file, but the CLI currently has no command that exercises it — so today the only practical way to get a physical wipe is to open the vault through the file picker in a supported browser. If you rely on the duress feature, confirm you opened the browser vault through its file picker (not drag-and-drop) in a supported browser.
 - **The vault file is trivially identifiable as a Fob vault, even without the passphrase.** The first 4 bytes of `vault.fob` are the literal ASCII magic `FOB2` — anyone with the file (a `file`/`xxd`/`head` away) can immediately confirm "this is a Fob password vault," before ever touching a passphrase. The decoy/duress design protects *which passphrase unlocks which content* once someone is already trying to open the vault; it does not hide that the file is a vault at all — the filename (`vault.fob`) gives that away too. If your threat model requires the file itself to be unidentifiable (e.g. deniability that you even use a password manager), rename it to something innocuous and be aware the magic bytes still identify it to anyone who inspects the content directly, not just the name.
 - **Actively-edited secret fields (the master passphrase, a password, a note body, an SSH private key) aren't guaranteed zeroized in every intermediate state while you're typing.** The CLI zeroizes each field's *final* value when its form is dropped, but Rust's `String` can reallocate internally as you type (e.g. via `push`/`insert`) — each old backing buffer is freed by the allocator without being zeroed first, so fragments of an in-progress passphrase can in principle linger in freed-but-unoverwritten heap memory until something else reuses that allocation. This only matters against an adversary who can already read the process's memory (a debugger, a core dump, a swapped-out page) — a much higher bar than a passing observer — but it means the README's "sensitive buffers zeroized" claim is exact for data at rest and for a field's value once you stop editing it, not for every transient buffer touched while you were actively typing it.
 
@@ -107,7 +107,7 @@ All cryptographic operations live in `fob-core`, which has no filesystem or netw
 curl -fsSL https://raw.githubusercontent.com/Arcel-Org/Fob/main/install/install.sh | sh
 ```
 
-Installs `fob` and `fob-agent` to `~/.fob/bin` and adds that to your PATH.
+Installs `fob` to `~/.fob/bin` and adds that to your PATH.
 Every downloaded release is verified against its published SHA256 checksum
 before anything is installed, and against its [cosign](https://docs.sigstore.dev/)
 signature too if `cosign` is on your PATH.
@@ -133,10 +133,10 @@ Requires Rust 1.88+.
 ```sh
 git clone https://github.com/Arcel-Org/Fob.git
 cd Fob
-cargo build --release -p fob-cli -p fob-agent
+cargo build --release -p fob-cli
 ```
 
-The binaries land at `target/release/fob` and `target/release/fob-agent` — both are required (the CLI spawns the agent as a sibling process for SSH agent support).
+The binary lands at `target/release/fob`.
 
 ---
 
@@ -170,8 +170,7 @@ fob/
 │   ├── fob-core/       # cryptography and vault format — no I/O, pure logic
 │   ├── fob-wasm/       # browser bindings for fob-core (compiled to wasm32)
 │   ├── fob-cli/        # install/format/status/recover — USB provisioning only
-│   ├── fob-host/       # host-OS integration for the CLI
-│   └── fob-agent/      # SSH agent daemon
+│   └── fob-host/       # host-OS integration for the CLI (device, clipboard, fs)
 ├── install/
 │   └── install.sh      # one-line installer
 ├── site/               # GitHub Pages front door: landing page + header inspector

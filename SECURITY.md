@@ -34,7 +34,7 @@ We consider vulnerabilities in the following in-scope:
 - Cryptographic implementation errors (KDF, AEAD, key derivation)
 - Memory safety issues (use-after-free, buffer overflows, information leaks)
 - Vault format parsing vulnerabilities
-- TOTP/SSH agent protocol implementation bugs
+- TOTP implementation bugs
 - Clipboard handling or auto-lock bypasses
 
 Out of scope:
