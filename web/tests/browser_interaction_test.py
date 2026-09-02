@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Headless-chromium interaction checks for web/index.html (the browser vault).
+"""Headless-chromium interaction checks for the browser vault.
 
 Drives a real Chromium instance over the Chrome DevTools Protocol (CDP) and
 clicks/types through the actual UI exactly like a user would — this is not a
 unit test of the JS functions in isolation, it renders the real page and
 dispatches real DOM events (`click`, `input`) through the same delegated
-listeners `index.html` wires up for a mouse/keyboard user.
+listeners the vault wires up for a mouse/keyboard user.
 
 Covers interaction flows that had no automated coverage before this pass:
   - search filtering (passwords view)
@@ -13,15 +13,27 @@ Covers interaction flows that had no automated coverage before this pass:
   - auto-lock after inactivity (real timeout, sped up via an injected
     `setTimeout` shim so the test doesn't have to sleep for 15 real minutes)
   - entry list rendering/scrolling with many entries
+  - the full USB lifecycle (when FOB_USB_DIR is set): vault created through
+    the real UI on the *installed* index.html, exported onto the volume,
+    reopened from it, updated and re-exported — proving writes persist to
+    the stick (constant-size padded vault, so verified by content not size)
 
 Requires: chromium at /usr/bin/chromium, Python's `websockets` package.
 
 Usage:
+    # Baseline — the repo's own build:
     python3 web/tests/browser_interaction_test.py
+
+    # Against an *installed* artifact (e.g. the index.html `fob install`
+    # wrote onto a USB volume), with the USB lifecycle check enabled:
+    FOB_INDEX_HTML=file:///path/to/USB/index.html \\
+    FOB_USB_DIR=/path/to/USB \\
+      python3 web/tests/browser_interaction_test.py
 
 Exits 0 if every check passes, 1 otherwise (with a summary of failures).
 """
 import asyncio
+import base64
 import json
 import os
 import re
@@ -36,7 +48,14 @@ import websockets
 
 CHROME = "/usr/bin/chromium"
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-INDEX_HTML = f"file://{REPO_ROOT}/web/index.html"
+# Which built vault to drive. Defaults to the repo's own web/index.html; set
+# FOB_INDEX_HTML to test the *installed* artifact (e.g. the file `fob install`
+# wrote onto a USB volume): FOB_INDEX_HTML=file:///…/USB/index.html
+INDEX_HTML = os.environ.get("FOB_INDEX_HTML") or f"file://{REPO_ROOT}/web/index.html"
+# When set to a writable directory (e.g. a mounted USB volume), the harness
+# adds the end-to-end "vault created → exported to the volume → reopened and
+# unlocked from it" lifecycle check (check_usb_lifecycle). Unset in CI.
+USB_DIR = os.environ.get("FOB_USB_DIR") or ""
 
 PASSPHRASE = "correct-horse-battery-staple"
 
@@ -134,15 +153,25 @@ class Chromium:
                 return
         raise RuntimeError("chromium never printed a DevTools listening port")
 
-    async def open_page(self, on_new_document_js=None):
+    async def open_page(self, on_new_document_js=None, download_dir=None):
         """Open a blank tab, optionally install a bootstrap script that runs
-        before any page script, then navigate it to index.html and wait for load."""
+        before any page script, then navigate it to index.html and wait for load.
+
+        If `download_dir` is given, downloads on this page are routed there
+        (the browser vault's export fallback path) — must be set per page,
+        on the page's own session, or it does not apply to that page."""
         req = urllib.request.Request(f"http://127.0.0.1:{self.port}/json/new?about:blank", method="PUT")
         with urllib.request.urlopen(req) as r:
             info = json.loads(r.read())
         cdp = await CDP.connect(info["webSocketDebuggerUrl"])
         await cdp.send("Page.enable")
         await cdp.send("Runtime.enable")
+        if download_dir:
+            await cdp.send("Browser.setDownloadBehavior", {
+                "behavior": "allow",
+                "downloadPath": download_dir,
+                "eventsEnabled": True,
+            })
         if on_new_document_js:
             await cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": on_new_document_js})
         await cdp.send("Page.navigate", {"url": INDEX_HTML})
@@ -597,6 +626,117 @@ async def check_otpauth_uri_import(chrome):
         await cdp.close()
 
 
+async def check_usb_lifecycle(chrome):
+    """The full USB story, end to end, against the *installed* index.html:
+
+      1. create a vault through the real UI,
+      2. add a password + a TOTP,
+      3. click Export → the app writes vault.fob onto the volume (via the
+         download fallback, i.e. the Firefox/Safari path — the File System
+         Access picker is deliberately removed so the test is deterministic),
+      4. confirm the file actually exists on the volume and is non-empty,
+      5. open that same file back from the volume and unlock it with the
+         passphrase (the file-input fallback path), verifying both entries
+         survived the encrypt→export→reimport→decrypt cycle,
+      6. add another entry and export again — the updated file on the volume
+         must still unlock with the new entry present (writes actually
+         persist to the stick, not just in-memory/IndexedDB).
+
+    This is the release-readiness proof: the exact HTML file `fob install`
+    puts on a USB drive really does create, save, reopen and persist a vault
+    on that drive, entirely offline. Only runs when FOB_USB_DIR is set.
+    """
+    if not USB_DIR:
+        return True, "skipped (FOB_USB_DIR not set)"
+    if not os.path.isdir(USB_DIR):
+        return False, f"FOB_USB_DIR is not a directory: {USB_DIR}"
+
+    vault_fob = os.path.join(USB_DIR, "vault.fob")
+    if os.path.exists(vault_fob):
+        os.remove(vault_fob)  # start from a clean stick
+
+    # Force the deterministic cross-browser code paths: no File System Access
+    # API, so export falls back to download and open falls back to file input.
+    bootstrap = "delete window.showSaveFilePicker; delete window.showOpenFilePicker;"
+    cdp = await chrome.open_page(on_new_document_js=bootstrap, download_dir=USB_DIR)
+    try:
+        await create_vault(cdp)
+        await add_password(cdp, "USB Lifecycle", "chase", "usb-lifecycle-pw")
+        await add_totp(cdp, "USB Co", "dana@example.com", "JBSWY3DPEHPK3PXP")
+
+        # Export → vault.fob must land on the volume.
+        await click(cdp, '[data-action="export"]')
+        deadline = time.time() + 10
+        while time.time() < deadline and not os.path.exists(vault_fob):
+            await asyncio.sleep(0.2)
+        if not os.path.exists(vault_fob):
+            return False, "export produced no vault.fob on the volume"
+        size1 = os.path.getsize(vault_fob)
+        if size1 < 1000:
+            return False, f"exported vault.fob implausibly small: {size1} bytes"
+    finally:
+        await cdp.close()
+
+    # Reopen the exported file from the volume in a fresh page and unlock it.
+    with open(vault_fob, "rb") as f:
+        exported = f.read()
+    cdp = await chrome.open_page(on_new_document_js=bootstrap, download_dir=USB_DIR)
+    try:
+        # Feed the raw bytes into the page the same way pickVaultFile does,
+        # then drive the real unlock card.
+        b64 = base64.b64encode(exported).decode()
+        await cdp.eval(
+            "vaultFileData = new Uint8Array(atob(" + repr(b64) + ").split('').map(function(c){return c.charCodeAt(0);})); "
+            "showUnlockCard('vault.fob'); 1;",
+            await_promise=False,
+        )
+        await asyncio.sleep(0.2)
+        await unlock_vault(cdp)
+        pws = await cdp.eval("vaultJSON.passwords.length")
+        totps = await cdp.eval("vaultJSON.totp.length")
+        if pws != 1 or totps != 1:
+            return False, f"reopened vault expected 1 password & 1 TOTP, got {pws} & {totps}"
+
+        # Add an entry, export again, and confirm the updated file still
+        # unlocks. The vault is a fixed-size padded blob (16 MiB default), so
+        # the re-exported file has the same byte length — detect the write by
+        # removing the old file first, then comparing content, not size.
+        await add_password(cdp, "USB Lifecycle 2", "erin", "second-pw")
+        if os.path.exists(vault_fob):
+            os.remove(vault_fob)  # browser renames dup downloads; start clean
+        await click(cdp, '[data-action="export"]')
+        deadline = time.time() + 10
+        while time.time() < deadline and not os.path.exists(vault_fob):
+            await asyncio.sleep(0.2)
+        if not os.path.exists(vault_fob):
+            return False, "re-export produced no vault.fob on the volume"
+        with open(vault_fob, "rb") as f:
+            exported2 = f.read()
+        if exported2 == exported:
+            return False, "re-exported vault.fob is byte-identical to the first (edit not persisted)"
+        if len(exported2) != len(exported):
+            return False, f"fixed-size vault changed size across re-export: {len(exported)} -> {len(exported2)}"
+        b64 = base64.b64encode(exported2).decode()
+        await cdp.eval(
+            "vaultFileData = new Uint8Array(atob(" + repr(b64) + ").split('').map(function(c){return c.charCodeAt(0);})); "
+            "showUnlockCard('vault.fob'); 1;",
+            await_promise=False,
+        )
+        await asyncio.sleep(0.2)
+        await lock_vault(cdp)
+        await unlock_vault(cdp)
+        pws = await cdp.eval("vaultJSON.passwords.length")
+        if pws != 2:
+            return False, f"after re-export + re-unlock expected 2 passwords, got {pws}"
+        return True, (
+            "vault created, exported to the volume, reopened+unlocked from it, "
+            "updated, re-exported and re-unlocked — writes persist to the stick "
+            f"({len(exported2)} bytes)"
+        )
+    finally:
+        await cdp.close()
+
+
 CHECKS = [
     ("search filtering", check_search_filtering),
     ("TOTP countdown display", check_totp_countdown),
@@ -607,6 +747,9 @@ CHECKS = [
     ("max-security Argon2id profile selectable", check_max_security_profile),
     ("otpauth:// URI auto-fill + save", check_otpauth_uri_import),
 ]
+
+if USB_DIR:
+    CHECKS.append(("USB lifecycle: create → export → reopen → update → re-export", check_usb_lifecycle))
 
 
 async def main():

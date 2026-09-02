@@ -148,13 +148,20 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 
 python3 web/tests/browser_interaction_test.py              # headless-chromium checks for web/index.html
+
+# The same battery against an *installed* artifact — e.g. the index.html
+# `fob install` wrote onto a USB volume — plus the USB lifecycle check
+# (vault created → exported onto the volume → reopened from it → updated):
+FOB_INDEX_HTML=file:///path/to/USB/index.html FOB_USB_DIR=/path/to/USB \
+  python3 web/tests/browser_interaction_test.py
 ```
 
 The browser-vault check drives a real headless Chromium instance (requires
 `chromium` and Python's `websockets` package) through the actual UI — search
 filtering, the TOTP countdown, auto-lock on inactivity, v4 round-tripping,
-the max-security profile, otpauth:// URI import, passphrase policy, and
-entry-list rendering/scrolling with many entries.
+the max-security profile, otpauth:// URI import, passphrase policy,
+entry-list rendering/scrolling with many entries, and (with `FOB_USB_DIR`
+set) the full create → export → reopen → update → re-export USB lifecycle.
 
 Automated tests cover the logic and rendering paths; they are not a
 substitute for a real person using the app. See `USABILITY_TESTING.md` for a
