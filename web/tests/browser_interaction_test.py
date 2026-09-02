@@ -255,6 +255,33 @@ async def add_totp(cdp, issuer, account, secret):
     await asyncio.sleep(0.3)
 
 
+async def add_card(cdp, name, number, cvv, exp_month="", exp_year=""):
+    await click(cdp, '.nav-item[data-view="cards"]')
+    await asyncio.sleep(0.1)
+    await click(cdp, '[data-action="add"]')
+    await asyncio.sleep(0.1)
+    await set_value(cdp, "mf-name", name)
+    await set_value(cdp, "mf-number", number)
+    await set_value(cdp, "mf-cvv", cvv)
+    if exp_month:
+        await set_value(cdp, "mf-exp_month", exp_month)
+    if exp_year:
+        await set_value(cdp, "mf-exp_year", exp_year)
+    await click(cdp, '[data-action="save-entry"]')
+    await asyncio.sleep(0.3)
+
+
+async def add_recovery_codes(cdp, title, codes_text):
+    await click(cdp, '.nav-item[data-view="recovery"]')
+    await asyncio.sleep(0.1)
+    await click(cdp, '[data-action="add"]')
+    await asyncio.sleep(0.1)
+    await set_value(cdp, "mf-title", title)
+    await set_value(cdp, "mf-codes", codes_text)
+    await click(cdp, '[data-action="save-entry"]')
+    await asyncio.sleep(0.3)
+
+
 async def lock_vault(cdp):
     """Click the sidebar lock action and wait for the lock screen to show."""
     await click(cdp, '[data-action="lock"]')
@@ -626,6 +653,91 @@ async def check_otpauth_uri_import(chrome):
         await cdp.close()
 
 
+async def check_new_sections(chrome):
+    """Files, Cards and Recovery Codes: create, render, reveal, persist.
+
+    The file picker itself can't be driven headlessly (it opens a native
+    dialog), so the file save path is exercised by seeding the modal's
+    `pendingFile` state directly — everything downstream (save → render →
+    detail + download button) is the real code path.
+    """
+    cdp = await chrome.open_page()
+    await create_vault(cdp)
+
+    for view in ("files", "cards", "recovery"):
+        if not await cdp.eval(f"!!document.querySelector('.nav-item[data-view=\"{view}\"]')"):
+            return False, f"nav item for {view} missing"
+
+    # ── Cards ──
+    await add_card(cdp, "Chase Sapphire", "4111111111111234", "123", "09", "2029")
+    if await cdp.eval("document.getElementById('cnt-cards').textContent") != "1":
+        return False, "cards count != 1 after add"
+    await click(cdp, '.entry-item')
+    await asyncio.sleep(0.2)
+    detail = await cdp.eval("document.querySelector('.detail-panel').textContent")
+    if "1234" not in detail:
+        return False, "card detail missing last-4"
+    await click(cdp, '[data-reveal]')
+    await asyncio.sleep(0.15)
+    revealed = await cdp.eval("document.querySelector('.detail-field-value')?.textContent || ''")
+    if "4111111111111234" not in revealed:
+        return False, f"card reveal failed: {revealed[:30]}"
+
+    # ── Recovery codes ──
+    await add_recovery_codes(cdp, "GitHub", "aaaa-bbbb-cccc\ndddd-eeee-ffff")
+    if await cdp.eval("document.getElementById('cnt-recovery').textContent") != "1":
+        return False, "recovery count != 1 after add"
+    await click(cdp, '.entry-item')
+    await asyncio.sleep(0.2)
+    if await cdp.eval("document.querySelectorAll('.recovery-row').length") != 2:
+        return False, "expected 2 recovery rows"
+    await click(cdp, '[data-rreveal]')
+    await asyncio.sleep(0.15)
+    code = await cdp.eval("document.querySelector('.recovery-code').textContent")
+    if "aaaa-bbbb-cccc" not in code:
+        return False, f"recovery reveal failed: {code[:30]}"
+
+    # ── Files (picker can't be driven; seed the modal state) ──
+    await click(cdp, '.nav-item[data-view="files"]')
+    await asyncio.sleep(0.1)
+    await click(cdp, '[data-action="add"]')
+    await asyncio.sleep(0.1)
+    await cdp.eval("pendingFile = {name:'secret.txt', mime:'text/plain', size:11, data:btoa('hello world')}; 1;", await_promise=False)
+    await click(cdp, '[data-action="save-entry"]')
+    await asyncio.sleep(0.3)
+    if await cdp.eval("document.getElementById('cnt-files').textContent") != "1":
+        return False, "files count != 1 after save"
+    await click(cdp, '.entry-item')
+    await asyncio.sleep(0.2)
+    if not await cdp.eval("!!document.querySelector('[data-download-file]')"):
+        return False, "file detail missing download button"
+
+    # ── All three survive a lock/unlock round-trip ──
+    await lock_vault(cdp)
+    await unlock_vault(cdp)
+    ok = await cdp.eval(
+        "['cnt-files','cnt-cards','cnt-recovery'].every(id => document.getElementById(id).textContent === '1')"
+    )
+    if not ok:
+        return False, "new sections lost after lock/unlock"
+
+    # ── "Connect USB" auto-save: a writable handle makes every change write
+    #    back to the vault file, no manual export. The File System Access
+    #    picker can't be driven headlessly, so stub the handle it returns.
+    await cdp.eval(
+        "window.__hwrites=[];"
+        "vaultFileHandle={createWritable:async()=>({write:async b=>{window.__hwrites.push(b.length)},close:async()=>{}})};"
+        "updateSyncStatus(); 1;",
+        await_promise=False,
+    )
+    if await cdp.eval("document.getElementById('tb-sync').className") != "topbar-sync on":
+        return False, "auto-save badge not shown when a handle is connected"
+    await add_password(cdp, "auto-save-probe", "u", "pw1234567890ab")
+    if await cdp.eval("window.__hwrites.length") < 1:
+        return False, "no auto-save write through connected handle"
+    return True, "Files, Cards and Recovery Codes create/render/reveal/persist; connected USB auto-saves"
+
+
 async def check_usb_lifecycle(chrome):
     """The full USB story, end to end, against the *installed* index.html:
 
@@ -746,6 +858,7 @@ CHECKS = [
     ("passphrase policy enforced on create", check_passphrase_policy_enforced),
     ("max-security Argon2id profile selectable", check_max_security_profile),
     ("otpauth:// URI auto-fill + save", check_otpauth_uri_import),
+    ("Files/Cards/Recovery Codes sections", check_new_sections),
 ]
 
 if USB_DIR:

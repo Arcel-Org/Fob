@@ -4,7 +4,7 @@
 
 **Your secrets, on your keychain.**
 
-An encrypted vault that lives on a USB drive — passwords, TOTP codes, SSH keys, and secure notes, protected by Argon2id and AES-256-GCM. Nothing installed on your computer; the vault opens entirely in your browser.
+An encrypted vault that lives on a USB drive — passwords, TOTP codes, SSH keys, notes, file attachments, payment cards, and recovery codes, protected by Argon2id and AES-256-GCM. Nothing installed on your computer; the vault opens entirely in your browser.
 
 [![CI](https://github.com/Arcel-Org/Fob/actions/workflows/ci.yml/badge.svg)](https://github.com/Arcel-Org/Fob/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
@@ -20,7 +20,7 @@ An encrypted vault that lives on a USB drive — passwords, TOTP codes, SSH keys
 > `fob update` installs a specific pinned release, never an in-between `main`
 > build. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
-Fob turns any USB stick into a cryptographic security key. Plug it in, open `index.html`, and unlock with a passphrase — your credentials are available as a password manager, TOTP generator, and SSH key store. Unplug and everything locks. The browser vault runs the exact same Rust crypto as the CLI (compiled to WASM and embedded in the single HTML file), so a vault created on the command line opens in the browser and vice versa.
+Fob turns any USB stick into a cryptographic security key. Plug it in, open `index.html`, and unlock with a passphrase — your credentials are available as a password manager, TOTP generator, SSH key store, and encrypted file vault. Unplug and everything locks. The browser vault runs the exact same Rust crypto as the CLI (compiled to WASM and embedded in the single HTML file), so a vault created on the command line opens in the browser and vice versa.
 
 ---
 
@@ -30,8 +30,11 @@ Fob turns any USB stick into a cryptographic security key. Plug it in, open `ind
 - **TOTP** — built-in two-factor code generation with live countdown; add by secret or by pasting an `otpauth://` setup URI
 - **SSH keys** — import Ed25519/RSA/ECDSA keys with fingerprints; store and manage them in the vault (passphrase-protected keys must have that passphrase stripped first, e.g. `ssh-keygen -p -N ""`)
 - **Secure notes** — encrypted free-text entries
+- **File attachments** — store small sensitive files inside the vault (recovery PDFs, scans, keys); download them back on demand. Attachments are capped (~1 MiB each) because vault slots are a few MiB total
+- **Cards** — payment-card storage with masked number/CVV, holder, and expiry
+- **Recovery codes** — per-account backup codes, one per line, revealed and copied individually
 - **Plausible deniability** — decoy vault slot with realistic fake data; duress slot that destroys the vault silently
-- **Browser vault** — a single self-contained HTML file that runs entirely offline, using the exact same encrypted vault format as the CLI — either can create, open, or update a vault the other made
+- **Browser vault** — a single self-contained HTML file that runs entirely offline, using the exact same encrypted vault format as the CLI — either can create, open, or update a vault the other made. Saves go to the browser's local IndexedDB cache automatically; **Connect USB** pairs a `vault.fob` once (Chromium's file picker) and every change after that writes straight back to the stick — no repeat exports
 - **Passphrase policy** — length, entropy and blocklist checks, enforced identically in the browser and CLI from shared Rust code; optional **max-security Argon2id** profile (128 MiB / 4 passes / 8 lanes)
 
 ---

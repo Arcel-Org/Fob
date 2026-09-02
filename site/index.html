@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Fob — an encrypted vault that lives on a USB drive. Passwords, TOTP, SSH keys and notes, opened entirely in the browser. Argon2id + AES-256-GCM. No cloud, no account.">
+<meta name="description" content="Fob — an encrypted vault that lives on a USB drive. Passwords, TOTP, SSH keys, notes, files and cards, opened entirely in the browser. Argon2id + AES-256-GCM. No cloud, no account.">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src https://api.github.com https://raw.githubusercontent.com; object-src 'none'; base-uri 'none'; form-action 'none';">
 <title>Fob — Your encrypted vault, on a USB drive</title>
 <style>
@@ -151,7 +151,7 @@
   <div class="hero">
     <div class="eyebrow"><span class="dot"></span>Latest release <b id="version-badge">…</b></div>
     <h1>Your secrets, on a<br><span class="grad">USB drive you own.</span></h1>
-    <p class="hero-sub">Passwords, TOTP codes, SSH keys and notes — encrypted and opened <b>entirely in your browser</b>. No cloud, no account, no app to install. Argon2id + AES-256-GCM keep the file safe; only your passphrase opens it.</p>
+    <p class="hero-sub">Passwords, TOTP codes, SSH keys, notes, files and cards — encrypted and opened <b>entirely in your browser</b>. No cloud, no account, no app to install. Argon2id + AES-256-GCM keep the file safe; only your passphrase opens it.</p>
     <div class="hero-cta">
       <a class="btn btn-primary" href="#install">Get Fob</a>
       <a class="btn btn-ghost" href="header-inspector.html">Inspect a vault header</a>
@@ -189,7 +189,17 @@
       <div class="feature">
         <div class="ico">📝</div>
         <h3>Secure notes</h3>
-        <p>Encrypted free-text entries for recovery codes, PINs, or anything else you want locked away.</p>
+        <p>Encrypted free-text entries for PINs or anything else you want locked away.</p>
+      </div>
+      <div class="feature">
+        <div class="ico">📁</div>
+        <h3>File attachments</h3>
+        <p>Store small sensitive files inside the encrypted vault — recovery PDFs, keys, scans — and download them back on demand.</p>
+      </div>
+      <div class="feature">
+        <div class="ico">💳</div>
+        <h3>Cards &amp; recovery codes</h3>
+        <p>Payment cards with masked number/CVV, plus per-account backup codes — revealed and copied with a click.</p>
       </div>
       <div class="feature">
         <div class="ico">🛡️</div>

@@ -183,3 +183,104 @@ impl NoteEntry {
         }
     }
 }
+
+/// An encrypted file attachment stored inside a vault slot.
+///
+/// The raw bytes are base64-encoded in `data`. Like every other field this
+/// lives inside the AES-256-GCM-encrypted slot, so at rest it is encrypted;
+/// base64 (rather than a byte array) keeps the JSON payload the browser and
+/// CLI share small and copy-paste safe. Vaults are fixed-size (16 MiB
+/// default) so file storage is capped in the UI (see the browser's file
+/// modal) and total capacity is bounded by the slot size.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEntry {
+    pub id: Uuid,
+    pub name: String,
+    pub mime: String,
+    pub size: u64,
+    pub data: String, // base64
+    pub created: u64,
+}
+
+impl FileEntry {
+    pub fn new(
+        name: impl Into<String>,
+        mime: impl Into<String>,
+        size: u64,
+        data: impl Into<String>,
+    ) -> Self {
+        let now = crate::vault::unix_now();
+        Self {
+            id: Uuid::new_v4(),
+            name: name.into(),
+            mime: mime.into(),
+            size,
+            data: data.into(),
+            created: now,
+        }
+    }
+}
+
+/// A payment card stored in the vault (number and CVV are secret).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CardEntry {
+    pub id: Uuid,
+    pub name: String, // label, e.g. "Chase Sapphire"
+    #[serde(default)]
+    pub holder: String,
+    pub number: SecretString,
+    #[serde(default)]
+    pub exp_month: String,
+    #[serde(default)]
+    pub exp_year: String,
+    pub cvv: SecretString,
+    pub created: u64,
+    pub modified: u64,
+}
+
+impl CardEntry {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        name: impl Into<String>,
+        holder: impl Into<String>,
+        number: impl Into<String>,
+        exp_month: impl Into<String>,
+        exp_year: impl Into<String>,
+        cvv: impl Into<String>,
+    ) -> Self {
+        let now = crate::vault::unix_now();
+        Self {
+            id: Uuid::new_v4(),
+            name: name.into(),
+            holder: holder.into(),
+            number: SecretString::new(number),
+            exp_month: exp_month.into(),
+            exp_year: exp_year.into(),
+            cvv: SecretString::new(cvv),
+            created: now,
+            modified: now,
+        }
+    }
+}
+
+/// A per-account set of recovery / backup codes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecoveryCodeEntry {
+    pub id: Uuid,
+    pub title: String,
+    #[serde(default)]
+    pub codes: Vec<SecretString>,
+    pub created: u64,
+}
+
+impl RecoveryCodeEntry {
+    pub fn new(title: impl Into<String>, codes: Vec<String>) -> Self {
+        let now = crate::vault::unix_now();
+        Self {
+            id: Uuid::new_v4(),
+            title: title.into(),
+            codes: codes.into_iter().map(SecretString::new).collect(),
+            created: now,
+        }
+    }
+}

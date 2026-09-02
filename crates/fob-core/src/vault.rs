@@ -14,7 +14,7 @@ use crate::{
         HEADER_SALT_OFFSET, HEADER_SIZE, MAX_VAULT_SIZE, MIN_VAULT_SIZE, RECOVERY_SLOT_INDEX,
     },
     kdf, recovery,
-    types::{NoteEntry, PasswordEntry, SshKeyEntry, TotpEntry},
+    types::{CardEntry, FileEntry, NoteEntry, PasswordEntry, RecoveryCodeEntry, SshKeyEntry, TotpEntry},
 };
 
 /// KDF choice and parameters for a vault, used both at creation
@@ -134,6 +134,12 @@ pub struct VaultBlob {
     pub ssh_keys: Vec<SshKeyEntry>,
     #[serde(default)]
     pub notes: Vec<NoteEntry>,
+    #[serde(default)]
+    pub files: Vec<FileEntry>,
+    #[serde(default)]
+    pub cards: Vec<CardEntry>,
+    #[serde(default)]
+    pub recovery_codes: Vec<RecoveryCodeEntry>,
 }
 
 impl VaultBlob {
@@ -148,6 +154,9 @@ impl VaultBlob {
             totps: Vec::new(),
             ssh_keys: Vec::new(),
             notes: Vec::new(),
+            files: Vec::new(),
+            cards: Vec::new(),
+            recovery_codes: Vec::new(),
         }
     }
 
@@ -157,7 +166,13 @@ impl VaultBlob {
 
     /// Total number of entries across all categories.
     pub fn entry_count(&self) -> usize {
-        self.passwords.len() + self.totps.len() + self.ssh_keys.len() + self.notes.len()
+        self.passwords.len()
+            + self.totps.len()
+            + self.ssh_keys.len()
+            + self.notes.len()
+            + self.files.len()
+            + self.cards.len()
+            + self.recovery_codes.len()
     }
 
     /// Serialize to JSON bytes.
@@ -636,6 +651,9 @@ fn validate_passphrases(main: &[u8], decoy: Option<&[u8]>, duress: Option<&[u8]>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine as _;
+    const B64: base64::engine::general_purpose::GeneralPurpose =
+        base64::engine::general_purpose::STANDARD;
 
     // Use a smaller vault, and a low iteration count, for fast tests.
     const TEST_VAULT_SIZE: usize = 512 * 1024; // 512 KiB
@@ -740,6 +758,24 @@ mod tests {
         blob.passwords
             .push(PasswordEntry::new("Test", "user", "pw"));
         blob.notes.push(NoteEntry::new("Note", "body text"));
+        blob.files.push(FileEntry::new(
+            "secret.txt",
+            "text/plain",
+            11,
+            B64.encode(b"hello world"),
+        ));
+        blob.cards.push(CardEntry::new(
+            "Chase Sapphire",
+            "Alice",
+            "4111111111111111",
+            "09",
+            "2029",
+            "123",
+        ));
+        blob.recovery_codes.push(RecoveryCodeEntry::new(
+            "GitHub",
+            vec!["aaaa-bbbb-cccc".to_string(), "dddd-eeee-ffff".to_string()],
+        ));
 
         let json = blob.to_json().unwrap();
         let parsed = VaultBlob::from_json(&json).unwrap();
@@ -748,6 +784,19 @@ mod tests {
         assert_eq!(parsed.passwords[0].name, "Test");
         assert_eq!(parsed.notes.len(), 1);
         assert_eq!(parsed.notes[0].title, "Note");
+        assert_eq!(parsed.files.len(), 1);
+        assert_eq!(parsed.files[0].name, "secret.txt");
+        assert_eq!(parsed.files[0].size, 11);
+        assert_eq!(
+            parsed.files[0].data,
+            B64.encode(b"hello world")
+        );
+        assert_eq!(parsed.cards.len(), 1);
+        assert_eq!(parsed.cards[0].number.expose(), "4111111111111111");
+        assert_eq!(parsed.cards[0].cvv.expose(), "123");
+        assert_eq!(parsed.recovery_codes.len(), 1);
+        assert_eq!(parsed.recovery_codes[0].codes.len(), 2);
+        assert_eq!(parsed.recovery_codes[0].codes[0].expose(), "aaaa-bbbb-cccc");
     }
 
     #[test]
@@ -760,10 +809,16 @@ mod tests {
         assert!(value.get("totp").is_some());
         assert!(value.get("last_modified").is_none());
         assert!(value.get("totps").is_none());
-        // `files` (FileEntry) and password `tags`/`history` were removed as
-        // dead schema surface — never populated or read by either interface.
-        // Locking this in so they don't silently creep back in.
-        assert!(value.get("files").is_none());
+        // `files`, `cards` and `recovery_codes` are live schema surface (added
+        // for the file/card/recovery-code vault sections); they always
+        // serialize as present-but-empty so both interfaces stay in sync and
+        // older vaults deserialize them with serde defaults.
+        assert!(value.get("files").is_some());
+        assert!(value.get("cards").is_some());
+        assert!(value.get("recovery_codes").is_some());
+        assert_eq!(value["files"].as_array().unwrap().len(), 0);
+        assert_eq!(value["cards"].as_array().unwrap().len(), 0);
+        assert_eq!(value["recovery_codes"].as_array().unwrap().len(), 0);
     }
 
     #[test]

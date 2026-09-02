@@ -5,6 +5,30 @@ land between releases. This file records what changed in each release.
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Added
+
+- **Vault sections: Files, Cards, Recovery Codes** — three new encrypted
+  categories alongside passwords/TOTP/SSH/notes:
+  - **Files** — store small sensitive attachments inside the vault (capped
+    at ~1 MiB each, because vault slots are a few MiB total) and download
+    them back on demand.
+  - **Cards** — payment-card storage with masked number/CVV, holder and
+    expiry; number and CVV are revealed/copied individually like passwords.
+  - **Recovery Codes** — per-account backup codes, one per line, with
+    per-code reveal and copy.
+  - All three live in the same encrypted `vault.fob`, are byte-compatible
+    with the CLI's format (`fob-core`), and survive lock/unlock round-trips.
+- **"Connect USB" auto-save** — replacing the old "Export to USB" chore:
+  pair a `vault.fob` once via Chromium's file picker and every change after
+  that writes straight back to that file automatically (the writable handle
+  is remembered across visits). The download fallback stays for browsers
+  without the File System Access API. An "Auto-save on" badge shows in the
+  top bar when a vault is connected.
+- **Add button moved to the top of the sidebar**, above the Vault section,
+  so it's always one click away regardless of the active view.
+
 ## [0.1.0] - 2026-09-02
 
 Initial release of the browser-first Fob platform.

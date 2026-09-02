@@ -152,12 +152,18 @@ svg{display:block;flex-shrink:0}
 .topbar-badge{background:var(--ok-dim);color:var(--ok);border-radius:var(--radius-xs);font-size:11px;font-weight:700;padding:2px 8px;letter-spacing:.07em;display:flex;align-items:center;gap:5px}
 .topbar-fp{color:var(--text-3);font-size:11px;font-family:var(--mono);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-sync{font-size:11px;font-weight:600;color:var(--ok);display:none;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;background:var(--ok-dim);white-space:nowrap}
+.topbar-sync.on{display:inline-flex}
+.topbar-sync .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex-shrink:0}
 .topbar-clock{font-size:12px;color:var(--text-2);font-family:var(--mono)}
 
 .vault-body{display:flex;flex:1;overflow:hidden}
 
 /* ── Sidebar ─────────────────────────────────────────────────────── */
 .sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;padding:10px 0}
+.sidebar-add{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 12px;margin:0 8px 8px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.05),0 3px 10px rgba(26,86,219,.25);transition:all var(--t);flex-shrink:0}
+.sidebar-add:hover{filter:brightness(1.03);box-shadow:0 1px 2px rgba(16,24,40,.05),0 6px 16px rgba(26,86,219,.32)}
+.sidebar-add:active{transform:scale(.98)}
 .sidebar-section{font-size:10px;font-weight:700;color:var(--text-3);letter-spacing:.1em;text-transform:uppercase;padding:10px 16px 4px}
 .nav-item{display:flex;align-items:center;gap:9px;padding:8px 12px 8px 14px;cursor:pointer;margin:1px 8px;border-radius:var(--radius-sm);transition:background var(--t),color var(--t);font-size:13px;font-weight:500;color:var(--text-2);user-select:none;position:relative}
 .nav-item:hover{background:var(--surface2);color:var(--text)}
@@ -174,6 +180,10 @@ svg{display:block;flex-shrink:0}
 .sidebar-action .ni{color:var(--text-3)}
 .sidebar-action:hover .ni{color:inherit}
 .sidebar-action.danger:hover .ni{color:var(--danger)}
+.sidebar-action-label{font-size:13px;color:var(--text-2);line-height:1.2}
+.sidebar-action-hint{font-size:10.5px;color:var(--text-3);line-height:1.2}
+.sidebar-action:hover .sidebar-action-label{color:var(--text)}
+.sidebar-action.danger:hover .sidebar-action-label{color:var(--danger)}
 
 /* ── Content ─────────────────────────────────────────────────────── */
 .content{flex:1;display:flex;flex-direction:column;overflow:hidden}
@@ -239,6 +249,14 @@ svg{display:block;flex-shrink:0}
 
 .reveal-btn{background:var(--surface2);color:var(--text-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 13px;font-size:12px;font-weight:500;display:flex;align-items:center;gap:5px;transition:all var(--t);flex-shrink:0;cursor:pointer}
 .reveal-btn:hover{background:var(--border2);color:var(--text)}
+.recovery-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--border)}
+.recovery-row:last-child{border-bottom:none}
+.recovery-code{font-family:var(--mono);font-size:14px;letter-spacing:.06em;color:var(--text-3);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recovery-code.mono{color:var(--text);font-size:12.5px}
+.recovery-row .reveal-btn,.recovery-row .copy-btn{padding:6px 10px}
+.file-drop{border:1.5px dashed var(--border2);border-radius:var(--radius);background:var(--surface2);padding:22px;text-align:center;cursor:pointer;color:var(--text-3);font-size:13px;transition:all var(--t)}
+.file-drop:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-dim)}
+.file-drop .fname{color:var(--text);font-weight:600}
 
 /* ── TOTP panel ──────────────────────────────────────────────────── */
 .totp-panel{display:none;flex:1;overflow-y:auto;padding:20px 24px}
@@ -419,12 +437,17 @@ svg{display:block;flex-shrink:0}
     </span>
     <span class="topbar-fp" id="tb-fp"></span>
     <div class="topbar-right">
+      <span class="topbar-sync" id="tb-sync"></span>
       <span class="topbar-clock" id="tb-clock"></span>
     </div>
   </div>
 
   <div class="vault-body">
     <div class="sidebar">
+      <button class="sidebar-add" data-action="add">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="13" height="13"><path d="M7 2v10M2 7h10"/></svg>
+        Add
+      </button>
       <div class="sidebar-section">Vault</div>
       <div class="nav-item active" data-view="passwords">
         <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="5.5" cy="5.5" r="3.5"/><path d="M8 8.5 12.5 13"/><path d="M11 11.5l1.5-1.5"/></svg></span>
@@ -442,12 +465,24 @@ svg{display:block;flex-shrink:0}
         <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M10 1.5H4.5a1 1 0 00-1 1v11a1 1 0 001 1h7a1 1 0 001-1V4.5L10 1.5z"/><path d="M10 1.5v3h3"/><path d="M5.5 7.5h5M5.5 10h3.5"/></svg></span>
         Notes <span class="nav-count" id="cnt-notes">0</span>
       </div>
+      <div class="nav-item" data-view="files">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M10 1.5H4.5a1 1 0 00-1 1v11a1 1 0 001 1h7a1 1 0 001-1V4.5L10 1.5z"/><path d="M10 1.5v3h3"/><path d="M5.5 8.5h5M5.5 11h5"/></svg></span>
+        Files <span class="nav-count" id="cnt-files">0</span>
+      </div>
+      <div class="nav-item" data-view="cards">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 6h13"/><path d="M4 9.5h3"/></svg></span>
+        Cards <span class="nav-count" id="cnt-cards">0</span>
+      </div>
+      <div class="nav-item" data-view="recovery">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M4 5.5h8"/><path d="M4 8h8"/><path d="M4 10.5h5"/><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/></svg></span>
+        Recovery Codes <span class="nav-count" id="cnt-recovery">0</span>
+      </div>
 
       <div class="sidebar-divider"></div>
       <div class="sidebar-section">Actions</div>
       <div class="sidebar-action" data-action="export">
         <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M8 3v9"/><path d="M5 9l3 3 3-3"/><path d="M3 13h10"/></svg></span>
-        Export to USB
+        <span><span class="sidebar-action-label">Connect USB</span><br><span class="sidebar-action-hint">auto-saves every change</span></span>
       </div>
       <div class="sidebar-action" data-action="import">
         <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M8 12V3"/><path d="M5 6l3-3 3 3"/><path d="M3 13h10"/></svg></span>
@@ -474,10 +509,6 @@ svg{display:block;flex-shrink:0}
           <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="14" height="14"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3"/></svg></span>
           <input id="search" type="text" placeholder="Search…" />
         </div>
-        <button class="add-btn" id="add-btn" data-action="add">
-          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="13" height="13"><path d="M7 2v10M2 7h10"/></svg>
-          Add
-        </button>
       </div>
       <div class="content-body">
         <div class="entry-list" id="entry-list"></div>
@@ -532,6 +563,10 @@ const IC = {
   clock:    `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3l2 1.5"/></svg>`,
   terminal: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="1" y="2.5" width="14" height="11" rx="2"/><path d="M4 7l2.5 2L4 11"/><path d="M9.5 11h3"/></svg>`,
   note:     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M10 1.5H4.5a1 1 0 00-1 1v11a1 1 0 001 1h7a1 1 0 001-1V4.5L10 1.5z"/><path d="M10 1.5v3h3"/><path d="M5.5 7.5h5M5.5 10h3.5"/></svg>`,
+  file:     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M10 1.5H4.5a1 1 0 00-1 1v11a1 1 0 001 1h7a1 1 0 001-1V4.5L10 1.5z"/><path d="M10 1.5v3h3"/><path d="M5.5 8.5h5M5.5 11h5"/></svg>`,
+  card:     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 6h13"/><path d="M4 9.5h3"/></svg>`,
+  recovery: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M4 5.5h8"/><path d="M4 8h8"/><path d="M4 10.5h5"/><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/></svg>`,
+  download: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M8 3v7"/><path d="M5 7l3 3 3-3"/><path d="M3 13h10"/></svg>`,
   copy:     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5"/></svg>`,
   check:    `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 8l4 4 6-6"/></svg>`,
   trash:    `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M2 4.5h12"/><path d="M5 4.5V3h6v1.5"/><path d="M3.5 4.5l1 9h7l1-9"/></svg>`,
@@ -590,6 +625,43 @@ async function _clearVaultBytes() {
   db.close();
 }
 
+// The vault file can also be *remembered*: when the user picks vault.fob via
+// the File System Access picker we store the FileSystemFileHandle in IDB so a
+// later visit to the same browser can re-acquire write access to that exact
+// file (with the user's permission) and auto-save back to it — no manual
+// "Export to USB" on every visit. FileSystemFileHandle is structured-clonable
+// and IDB is the sanctioned place to persist it.
+const VAULTIDB_KEY_HANDLE = 'handle';
+async function _saveVaultHandle(h) {
+  try {
+    const db = await _openVaultDB();
+    const tx = db.transaction(VAULTIDB_STORE, 'readwrite');
+    tx.objectStore(VAULTIDB_STORE).put(h, VAULTIDB_KEY_HANDLE);
+    await new Promise((r, j) => { tx.oncomplete = r; tx.onerror = j; });
+    db.close();
+  } catch (_) {}
+}
+async function _loadVaultHandle() {
+  try {
+    const db = await _openVaultDB();
+    const tx = db.transaction(VAULTIDB_STORE, 'readonly');
+    const h = await new Promise((r, j) => {
+      const q = tx.objectStore(VAULTIDB_STORE).get(VAULTIDB_KEY_HANDLE);
+      q.onsuccess = () => r(q.result); q.onerror = () => j(q.error);
+    });
+    db.close();
+    return h && h.kind === 'file' ? h : null;
+  } catch { return null; }
+}
+async function _clearVaultHandle() {
+  try {
+    const db = await _openVaultDB();
+    const tx = db.transaction(VAULTIDB_STORE, 'readwrite');
+    tx.objectStore(VAULTIDB_STORE).delete(VAULTIDB_KEY_HANDLE);
+    db.close();
+  } catch (_) {}
+}
+
 // ── State ──────────────────────────────────────────────────────────
 let vaultFileData   = null;  // Uint8Array of current encrypted vault
 let vaultFileHandle = null;  // FileSystemFileHandle for vaultFileData, if opened via
@@ -606,6 +678,8 @@ let currentView     = 'passwords';
 let selectedIdx     = -1;
 let searchQ         = '';
 let editingEntry    = null; // {field, id} of the entry the add-modal is editing, or null when adding
+let pendingFile     = null; // {name, mime, size, data(base64)} chosen in the file modal, not yet saved
+const FILE_MAX_BYTES = 1 * 1024 * 1024; // attachments cap — vault slots are ~4 MiB total
 let totpTimer       = null;
 let lockTimer       = null;
 let clipClearTimer  = null;
@@ -780,10 +854,25 @@ document.addEventListener('DOMContentLoaded', () => {
   // Runs after the pick card is already visible so nothing blocks the user.
   (async () => {
     try {
+      // Restore a remembered writable handle (File System Access API): if the
+      // user previously granted access to vault.fob, auto-save-back stays
+      // active after a reload without re-picking the file.
+      const savedHandle = await _loadVaultHandle();
+      if (savedHandle) {
+        try {
+          const perm = await savedHandle.queryPermission({ mode: 'readwrite' });
+          if (perm === 'granted' || (perm === 'prompt' && (await savedHandle.requestPermission({ mode: 'readwrite' })) === 'granted')) {
+            vaultFileHandle = savedHandle;
+          }
+        } catch (_) {}
+      }
+      // Cached bytes in IndexedDB (primary storage — the latest saved by this
+      // browser). Prefer these over the on-disk file: the browser may hold
+      // newer unsynced edits if a handle write was skipped.
       const savedBytes = await _loadVaultBytes();
       if (savedBytes) {
         vaultFileData = savedBytes;
-        vaultFileHandle = null; // IndexedDB has no live handle to the original file
+        vaultFileHandle = vaultFileHandle || null;
         showUnlockCard();
         return;
       }
@@ -873,7 +962,8 @@ async function pickVaultFile() {
       });
       const file = await h.getFile();
       vaultFileData = new Uint8Array(await file.arrayBuffer());
-      vaultFileHandle = h; // keep it — this is what lets a duress wipe reach the real file
+      vaultFileHandle = h; // keep it — duress wipe + auto-save-back reach the real file
+      await _saveVaultHandle(h); // remember it so a later visit re-pairs automatically
       showUnlockCard(file.name);
     } else {
       const inp = Object.assign(document.createElement('input'),{type:'file',accept:'.fob'});
@@ -898,6 +988,10 @@ async function importVault() {
   showUnlockCard();
 }
 
+// "Connect USB": pick (or create) the vault.fob you want Fob to keep in sync
+// with. From then on every change writes back to that file automatically —
+// no repeat exports. Browsers without the File System Access API fall back to
+// a one-shot download (Firefox/Safari).
 async function exportToUSB() {
   if (!vaultFileData) return;
   const blob = new Blob([vaultFileData],{type:'application/octet-stream'});
@@ -905,20 +999,36 @@ async function exportToUSB() {
     try {
       const h = await window.showSaveFilePicker({suggestedName:'vault.fob',types:[{description:'Fob Vault',accept:{'application/octet-stream':['.fob']}}]});
       const w = await h.createWritable(); await w.write(blob); await w.close();
-      toast('Exported to USB.', 'ok'); return;
+      vaultFileHandle = h;
+      await _saveVaultHandle(h);
+      updateSyncStatus();
+      toast('Connected — this vault now auto-saves to this file.', 'ok');
+      return;
     } catch(e) { if (e.name==='AbortError') return; }
   }
   const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'),{href:url,download:'vault.fob'});
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),60_000);
-  toast('vault.fob downloaded.', 'ok');
+  toast('vault.fob downloaded — save it to your USB.', 'ok');
 }
 
-// ── Persistence — silent save to IDB ──────────────────────────────
+// ── Persistence — silent save ─────────────────────────────────────
+// Writes go to IndexedDB (the browser's origin-local cache) and, when we hold
+// a writable FileSystemFileHandle for the vault file (picked via the File
+// System Access API), straight back to that file too — so the vault stays in
+// sync with the stick without a manual "Export to USB" on every visit. Handle
+// writes are best-effort: if the user revoked permission, the IDB cache still
+// holds the latest bytes and a later explicit export covers it.
 async function writeVaultBack(newBytes) {
   vaultFileData = newBytes;
   await _saveVaultBytes(newBytes);
+  if (vaultFileHandle) {
+    try {
+      const w = await vaultFileHandle.createWritable();
+      await w.write(newBytes); await w.close();
+    } catch (_) { /* permission revoked / file moved — IDB still has it */ }
+  }
 }
 
 // ── UI transitions ─────────────────────────────────────────────────
@@ -1044,6 +1154,19 @@ async function doCreateVault() {
   }
 }
 
+function updateSyncStatus() {
+  const el = document.getElementById('tb-sync');
+  if (!el) return;
+  if (vaultFileHandle) {
+    el.className = 'topbar-sync on';
+    el.innerHTML = '<span class="dot"></span>Auto-save on';
+    el.title = 'Every change is written back to this vault file automatically.';
+  } else {
+    el.className = 'topbar-sync';
+    el.innerHTML = '';
+  }
+}
+
 function enterVault() {
   document.getElementById('lock-screen').style.display = 'none';
   document.getElementById('vault-ui').style.display    = 'flex';
@@ -1053,6 +1176,7 @@ function enterVault() {
   document.getElementById('tb-version').textContent = `v${VERSION}`;
   startClock();
   resetLockTimer();
+  updateSyncStatus();
   switchView('passwords');
 }
 
@@ -1088,10 +1212,13 @@ function doLockClose() { doLock(); try { window.close(); } catch(_){} }
 
 // ── View management ────────────────────────────────────────────────
 const viewMeta = {
-  passwords: { title:'Passwords',  icon:IC.key,      field:'passwords', hasGrid:false },
-  totp:      { title:'Two-Factor', icon:IC.clock,    field:'totp',      hasGrid:true  },
-  ssh:       { title:'SSH Keys',   icon:IC.terminal, field:'ssh_keys',  hasGrid:false },
-  notes:     { title:'Notes',      icon:IC.note,     field:'notes',     hasGrid:false },
+  passwords: { title:'Passwords',       icon:IC.key,      field:'passwords',      hasGrid:false },
+  totp:      { title:'Two-Factor',      icon:IC.clock,    field:'totp',           hasGrid:true  },
+  ssh:       { title:'SSH Keys',        icon:IC.terminal, field:'ssh_keys',       hasGrid:false },
+  notes:     { title:'Notes',           icon:IC.note,     field:'notes',          hasGrid:false },
+  files:     { title:'Files',           icon:IC.file,     field:'files',          hasGrid:false },
+  cards:     { title:'Cards',           icon:IC.card,     field:'cards',          hasGrid:false },
+  recovery:  { title:'Recovery Codes',  icon:IC.recovery, field:'recovery_codes', hasGrid:false },
 };
 
 function switchView(view) {
@@ -1131,10 +1258,20 @@ function getItems() {
 }
 
 function updateCounts() {
-  document.getElementById('cnt-pw').textContent    = (vaultJSON?.passwords||[]).length;
-  document.getElementById('cnt-totp').textContent  = (vaultJSON?.totp||[]).length;
-  document.getElementById('cnt-ssh').textContent   = (vaultJSON?.ssh_keys||[]).length;
-  document.getElementById('cnt-notes').textContent = (vaultJSON?.notes||[]).length;
+  document.getElementById('cnt-pw').textContent       = (vaultJSON?.passwords||[]).length;
+  document.getElementById('cnt-totp').textContent     = (vaultJSON?.totp||[]).length;
+  document.getElementById('cnt-ssh').textContent      = (vaultJSON?.ssh_keys||[]).length;
+  document.getElementById('cnt-notes').textContent    = (vaultJSON?.notes||[]).length;
+  document.getElementById('cnt-files').textContent    = (vaultJSON?.files||[]).length;
+  document.getElementById('cnt-cards').textContent    = (vaultJSON?.cards||[]).length;
+  document.getElementById('cnt-recovery').textContent = (vaultJSON?.recovery_codes||[]).length;
+}
+
+function fmtBytes(n) {
+  if (!n && n !== 0) return '';
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/(1024*1024)).toFixed(2) + ' MB';
 }
 
 function onSearch() {
@@ -1169,6 +1306,17 @@ function renderList() {
     } else if (currentView==='notes') {
       name = item.title; label = item.title;
       sub = item.body ? item.body.replace(/\s+/g,' ').slice(0,40) : fmtDate(item.modified);
+    } else if (currentView==='files') {
+      name = item.name; label = item.name;
+      sub = fmtBytes(item.size||0) + (item.mime ? ' · '+item.mime : '');
+    } else if (currentView==='cards') {
+      name = item.name; label = item.name;
+      const last4 = String(item.number||'').replace(/\D/g,'').slice(-4);
+      sub = last4 ? '•••• '+last4 : (item.holder||'');
+    } else if (currentView==='recovery') {
+      name = item.title; label = item.title;
+      const n = (item.codes||[]).length;
+      sub = n + (n===1?' recovery code':' recovery codes');
     }
     const color = avatarColor(label);
     return `<div class="entry-item${i===selectedIdx?' selected':''}" data-select-idx="${i}" style="animation:fadeInUp .26s ease both;animation-delay:${Math.min(i,10)*20}ms">
@@ -1281,6 +1429,48 @@ document.addEventListener('click', e => {
     return;
   }
 
+  // Reveal/hide an individual recovery code.
+  const rc = e.target.closest('[data-rreveal]');
+  if (rc) {
+    const row = rc.closest('.recovery-row');
+    const span = row && row.querySelector('.recovery-code');
+    const codes = (vaultJSON?.recovery_codes||[]);
+    const rec = codes[selectedIdx];
+    const plain = (rec?.codes||[])[Number(rc.dataset.rreveal)] || '';
+    if (!span) return;
+    if (rc.dataset.showing==='1') {
+      span.textContent = '●'.repeat(Math.min(plain.length, 18));
+      rc.innerHTML = IC.eye+' Show';
+      rc.dataset.showing='0';
+    } else {
+      span.textContent = plain;
+      span.classList.add('mono');
+      rc.innerHTML = IC.eyeOff+' Hide';
+      rc.dataset.showing='1';
+    }
+    return;
+  }
+
+  // Download a stored encrypted file attachment (decoded client-side).
+  const df = e.target.closest('[data-download-file]');
+  if (df) {
+    const item = getItems()[Number(df.dataset.downloadFile)];
+    if (item && item.data) {
+      try {
+        const bin = atob(item.data);
+        const bytes = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+        const blob = new Blob([bytes], { type: item.mime || 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement('a'), { href: url, download: item.name || 'vault-file' });
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        toast('File downloaded.', 'ok');
+      } catch { toast('Could not decode file.', 'err'); }
+    }
+    return;
+  }
+
   const tb = e.target.closest('[data-copy-totp]');
   if (tb) {
     const meta = _totpMap[tb.dataset.copyTotp];
@@ -1292,17 +1482,20 @@ function renderDetail(item, i) {
   if (currentView==='passwords') renderPwDetail(item,i);
   else if (currentView==='ssh')  renderSshDetail(item,i);
   else if (currentView==='notes')renderNoteDetail(item,i);
+  else if (currentView==='files')   renderFileDetail(item,i);
+  else if (currentView==='cards')   renderCardDetail(item,i);
+  else if (currentView==='recovery')renderRecoveryDetail(item,i);
 }
 
-function dField(label, value, secret=false) {
+function dField(label, value, secret=false, displayValue) {
   const ck = 'k'+(_dcn++); const pk = 'p'+(_dcn++); const fid = 'f'+(_dcn++);
   _dc[ck]=value; _dc[pk]=value;
   const dots = '●'.repeat(Math.min(value.length, 20));
-  const display = secret ? dots : esc(value);
+  const shown = displayValue !== undefined ? displayValue : (secret ? dots : esc(value));
   return `<div class="detail-field">
     <div class="detail-field-label">${label}</div>
     <div class="detail-field-row">
-      <div class="detail-field-value${secret?' masked':''}" id="${fid}">${display}</div>
+      <div class="detail-field-value${secret?' masked':''}" id="${fid}">${shown}</div>
       ${secret?`<button class="reveal-btn" data-reveal="${fid}" data-plain="${pk}" data-showing="0">${IC.eye} Show</button>`:''}
       <button class="copy-btn" data-copy="${ck}">${IC.copy} Copy</button>
     </div>
@@ -1414,6 +1607,96 @@ function renderNoteDetail(n, i) {
     </div>`;
 }
 
+function renderFileDetail(f, i) {
+  const color = avatarColor(f.name);
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-header" style="animation:fadeIn .18s ease">
+      <div class="detail-avatar" style="background:${color}">${avatarLetter(f.name)}</div>
+      <div class="detail-hinfo">
+        <div class="detail-title">${esc(f.name)}</div>
+        <div class="detail-subtitle">${fmtBytes(f.size||0)}${f.mime ? ' · '+esc(f.mime) : ''}</div>
+      </div>
+    </div>
+    <div class="detail-field">
+      <div class="detail-field-label">Encrypted attachment</div>
+      <div class="detail-field-row">
+        <span style="color:var(--text-2);font-size:13px">Stored inside your encrypted vault.</span>
+        <button class="btn btn-primary btn-sm" data-download-file="${i}">${IC.download} Download</button>
+      </div>
+    </div>
+    <div class="detail-meta">
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">Added</span>
+        <span class="detail-meta-val">${fmtDate(f.created)}</span>
+      </div>
+    </div>
+    <div class="danger-zone">
+      <button class="btn btn-ghost btn-sm" data-edit-type="files" data-edit-id="${esc(f.id)}">${IC.pencil} Replace file</button>
+      <button class="btn btn-danger btn-sm" data-delete-type="files" data-delete-id="${esc(f.id)}" data-delete-idx="${i}">${IC.trash} Delete file</button>
+    </div>`;
+}
+
+function renderCardDetail(c, i) {
+  const color = avatarColor(c.name);
+  const last4 = String(c.number||'').replace(/\D/g,'').slice(-4);
+  const numDisp = c.number ? '•••• •••• •••• '+(last4||'') : '';
+  const exp = [c.exp_month, c.exp_year].filter(Boolean).join(' / ');
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-header" style="animation:fadeIn .18s ease">
+      <div class="detail-avatar" style="background:${color}">${avatarLetter(c.name)}</div>
+      <div class="detail-hinfo">
+        <div class="detail-title">${esc(c.name)}</div>
+        ${last4 ? `<div class="detail-subtitle">•••• ${esc(last4)}</div>` : ''}
+      </div>
+    </div>
+    ${dField('Card number', c.number || '', !!c.number, numDisp)}
+    ${c.holder ? dField('Name on card', c.holder) : ''}
+    ${exp ? dField('Expiry', exp) : ''}
+    ${c.cvv ? dField('CVV', c.cvv, true) : ''}
+    <div class="detail-meta">
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">Added</span>
+        <span class="detail-meta-val">${fmtDate(c.created)}</span>
+      </div>
+      ${c.modified && c.modified !== c.created ? `<div class="detail-meta-item">
+        <span class="detail-meta-label">Modified</span>
+        <span class="detail-meta-val">${fmtDate(c.modified)}</span>
+      </div>` : ''}
+    </div>
+    <div class="danger-zone">
+      <button class="btn btn-ghost btn-sm" data-edit-type="cards" data-edit-id="${esc(c.id)}">${IC.pencil} Edit</button>
+      <button class="btn btn-danger btn-sm" data-delete-type="cards" data-delete-id="${esc(c.id)}" data-delete-idx="${i}">${IC.trash} Delete card</button>
+    </div>`;
+}
+
+function renderRecoveryDetail(r, i) {
+  const color = avatarColor(r.title);
+  const codes = r.codes || [];
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-header" style="animation:fadeIn .18s ease">
+      <div class="detail-avatar" style="background:${color}">${avatarLetter(r.title)}</div>
+      <div class="detail-hinfo">
+        <div class="detail-title">${esc(r.title)}</div>
+        <div class="detail-subtitle">${codes.length} ${codes.length===1?'code':'codes'}</div>
+      </div>
+    </div>
+    <div class="detail-field">
+      <div class="detail-field-label">Recovery codes</div>
+      ${codes.map((code, j) => {
+        const ck = 'k'+(_dcn++); _dc[ck]=code;
+        return `<div class="recovery-row">
+          <span class="recovery-code masked" data-ridx="${j}">${'●'.repeat(Math.min(String(code).length, 18))}</span>
+          <button class="reveal-btn" data-rreveal="${j}" data-showing="0">${IC.eye} Show</button>
+          <button class="copy-btn" data-copy="${ck}">${IC.copy} Copy</button>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="danger-zone">
+      <button class="btn btn-ghost btn-sm" data-edit-type="recovery_codes" data-edit-id="${esc(r.id)}">${IC.pencil} Edit</button>
+      <button class="btn btn-danger btn-sm" data-delete-type="recovery_codes" data-delete-id="${esc(r.id)}" data-delete-idx="${i}">${IC.trash} Delete codes</button>
+    </div>`;
+}
+
 // ── Confirm modal ──────────────────────────────────────────────────
 let confirmResolve = null;
 function showConfirm(title, sub) {
@@ -1476,6 +1759,27 @@ const modalDefs = {
       {id:'private_key', label:'Private key', type:'textarea', required:true, rows:12, mono:true},
     ]
   },
+  files: { title: 'Add File', wide: true, fields: [] }, // handled specially (file picker)
+  cards: {
+    title: 'Add Card',
+    fields: [
+      {id:'name',      label:'Card name',      type:'text', required:true, placeholder:'e.g. Chase Sapphire'},
+      {id:'holder',    label:'Name on card',   type:'text', required:false},
+      {id:'number',    label:'Card number',    type:'text', required:true,  mono:true, placeholder:'4111 1111 1111 1111'},
+      {id:'exp_month', label:'Expiry month (MM)',   type:'text', required:false, placeholder:'09'},
+      {id:'exp_year',  label:'Expiry year (YYYY)',  type:'text', required:false, placeholder:'2029'},
+      {id:'cvv',       label:'CVV',             type:'text', required:true,  mono:true, placeholder:'123'},
+    ]
+  },
+  recovery: {
+    title: 'Add Recovery Codes',
+    wide: true,
+    fields: [
+      {id:'title', label:'Account / service', type:'text', required:true, placeholder:'e.g. GitHub'},
+      {id:'codes', label:'Recovery codes (one per line)', type:'textarea', required:true, rows:8, mono:true,
+       placeholder:'abc1-def2-ghi3\n...'},
+    ]
+  },
 };
 
 function openAddModal() {
@@ -1491,9 +1795,52 @@ function openEditModal(field, id) {
   openEntryModal(`Edit ${baseTitle}`, entry);
 }
 
+function openFileModal(prefill) {
+  pendingFile = null;
+  const isReplace = !!editingEntry;
+  const errEl = document.getElementById('modal-err');
+  errEl.textContent = '';
+  document.getElementById('modal').classList.add('modal-wide');
+  document.getElementById('modal-title').textContent = isReplace ? 'Replace file' : 'Add File';
+  const existing = isReplace
+    ? `<div style="margin-top:8px;font-size:12px;color:var(--text-3)">Current: <strong style="color:var(--text)">${esc(prefill.name||'')}</strong> (${fmtBytes(prefill.size||0)})</div>`
+    : '';
+  document.getElementById('modal-fields').innerHTML = `
+    <div class="field" style="margin-bottom:12px">
+      <label>File</label>
+      <div class="file-drop" id="file-drop">
+        ${IC.file} <span id="file-drop-label">Click to choose a file…</span>
+      </div>
+      ${existing}
+    </div>`;
+  document.getElementById('add-modal').classList.add('open');
+  document.getElementById('file-drop').addEventListener('click', () => {
+    const inp = Object.assign(document.createElement('input'), { type: 'file' });
+    inp.onchange = () => {
+      const file = inp.files && inp.files[0];
+      if (!file) return;
+      if (file.size > FILE_MAX_BYTES) {
+        errEl.textContent = `File too large — the maximum attachment is ${fmtBytes(FILE_MAX_BYTES)}.`;
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const b64 = String(reader.result).split(',')[1] || '';
+        pendingFile = { name: file.name, mime: file.type || 'application/octet-stream', size: file.size, data: b64 };
+        const lbl = document.getElementById('file-drop-label');
+        lbl.textContent = file.name; lbl.classList.add('fname');
+        errEl.textContent = '';
+      };
+      reader.readAsDataURL(file);
+    };
+    inp.click();
+  });
+}
+
 function openEntryModal(title, prefill) {
   const def = modalDefs[currentView];
   if (!def) return;
+  if (currentView === 'files') { openFileModal(prefill); return; }
   // Display value for a field. The stored TOTP secret is a raw byte array
   // (Rust shape); the form edits it as base32, so decode for display.
   const pval = f => {
@@ -1606,6 +1953,26 @@ async function saveEntry() {
   if (!def) return;
   const errEl = document.getElementById('modal-err');
   errEl.textContent = '';
+  const btn = document.getElementById('modal-save');
+  // Files is a picker-backed special case (base64 payload), not text fields.
+  if (currentView === 'files') {
+    if (!pendingFile) { errEl.textContent = 'Choose a file first.'; return; }
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
+    const now = nowSecs();
+    if (editingEntry) {
+      const ex = (vaultJSON.files || []).find(e => e.id === editingEntry.id);
+      if (ex) { ex.name = pendingFile.name; ex.mime = pendingFile.mime; ex.size = pendingFile.size; ex.data = pendingFile.data; }
+    } else {
+      vaultJSON.files = vaultJSON.files || [];
+      vaultJSON.files.push({ id: uuid(), created: now, name: pendingFile.name, mime: pendingFile.mime, size: pendingFile.size, data: pendingFile.data });
+    }
+    vaultJSON.modified = now;
+    const ok = await persistVault();
+    btn.disabled = false; btn.innerHTML = 'Save entry';
+    closeModal();
+    if (ok) { renderList(); toast('File saved.', 'ok'); }
+    return;
+  }
   const body = {};
   for (const f of def.fields) {
     if (f.helper) continue; // helper fields (e.g. otpauth URI) aren't stored
@@ -1613,6 +1980,10 @@ async function saveEntry() {
     const val = el?.value?.trim();
     if (f.required && !val) { errEl.textContent=`${f.label} is required.`; el?.focus(); return; }
     body[f.id] = val||'';
+  }
+  if (currentView === 'recovery') {
+    body.codes = (body.codes || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    if (!body.codes.length) { errEl.textContent = 'Enter at least one recovery code.'; return; }
   }
   if (currentView==='totp') {
     // Store the secret as raw bytes + Rust's "Sha1" algorithm name so the
@@ -1630,10 +2001,9 @@ async function saveEntry() {
     catch(e) { errEl.textContent = e.message; return; }
     sshAlgorithmValue = sshAlgorithm(body.public_key);
   }
-  const btn = document.getElementById('modal-save');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
   const now=nowSecs();
-  const field = currentView==='ssh' ? 'ssh_keys' : currentView==='totp' ? 'totp' : currentView;
+  const field = currentView==='ssh' ? 'ssh_keys' : currentView==='totp' ? 'totp' : currentView==='recovery' ? 'recovery_codes' : currentView;
   const editIdx = editingEntry ? (vaultJSON[field]||[]).findIndex(e => e.id === editingEntry.id) : -1;
 
   if (editIdx !== -1) {
@@ -1656,6 +2026,12 @@ async function saveEntry() {
     } else if (currentView==='ssh') {
       vaultJSON.ssh_keys=(vaultJSON.ssh_keys||[]);
       vaultJSON.ssh_keys.push({id,created:now,fingerprint:sshFingerprintValue,algorithm:sshAlgorithmValue,...body});
+    } else if (currentView==='cards') {
+      vaultJSON.cards=(vaultJSON.cards||[]);
+      vaultJSON.cards.push({id,created:now,modified:now,...body});
+    } else if (currentView==='recovery') {
+      vaultJSON.recovery_codes=(vaultJSON.recovery_codes||[]);
+      vaultJSON.recovery_codes.push({id,created:now,...body});
     }
   }
   vaultJSON.modified=now;
@@ -1671,7 +2047,8 @@ async function persistVault() {
   try {
     const newBytes = await vaultSave(vaultFileData, vaultPassphrase, vaultSlot, vaultJSON);
     await writeVaultBack(newBytes);
-  } catch(e) { toast(`Save failed: ${e.message}`, 'err'); }
+    return true;
+  } catch(e) { toast(`Save failed: ${e.message}`, 'err'); return false; }
 }
 
 // ── Clipboard ──────────────────────────────────────────────────────
