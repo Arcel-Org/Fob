@@ -1,8 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use std::io::Write as _;
 use std::path::PathBuf;
 
-use crate::tui;
 use fob_host::fs_util::atomic_write;
 
 pub const WEB_INDEX_HTML: &str = include_str!("../../../web/index.html");
@@ -28,7 +28,7 @@ fn pinned_install_url(tag: &str) -> String {
     name = "fob",
     about = "Fob — encrypted vault on a USB drive",
     version = env!("CARGO_PKG_VERSION"),
-    long_about = None,
+    long_about = "Fob keeps a browser vault on a USB drive. This command is only for\ninstalling/updating and low-level device operations — daily use happens\nentirely in the browser (open index.html on the USB).",
 )]
 pub struct Cli {
     /// Path to a specific USB device or vault file.
@@ -41,14 +41,25 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Interactive setup: format USB, create vault, write web UI.
-    Setup,
+    /// Write (or update) the browser vault UI on the USB device.
+    Install {
+        /// Path to a specific USB device. Auto-picks the sole USB drive if omitted.
+        device: Option<PathBuf>,
+    },
 
-    /// Open the TUI for an existing vault.
-    Unlock { device: Option<PathBuf> },
+    /// Format a USB drive (erases it) and create a fresh v4/Argon2id vault.
+    Format {
+        /// Path to a specific USB device. Auto-picks the sole USB drive if omitted.
+        device: Option<PathBuf>,
+    },
 
-    /// Show detected USB drives.
-    Devices,
+    /// Show detected USB drives, which have a vault, and the current version.
+    Status,
+
+    /// Unlock a vault's Main slot using a recovery key instead of a
+    /// passphrase (see the "recovery key" prompt during format), and set a
+    /// new main passphrase.
+    Recover { device: Option<PathBuf> },
 
     /// Check for and install updates.
     Update {
@@ -56,27 +67,81 @@ pub enum Commands {
         #[arg(long)]
         check: bool,
     },
-
-    /// Unlock a vault's Main slot using a recovery key instead of a
-    /// passphrase (see the "recovery key" prompt during `fob setup`), and
-    /// set a new main passphrase.
-    Recover { device: Option<PathBuf> },
 }
 
 impl Cli {
     pub fn run(self) -> Result<()> {
         match self.command {
-            None | Some(Commands::Setup) => tui::run_tui(self.device),
-            Some(Commands::Unlock { device }) => tui::run_tui(device.or(self.device)),
-            Some(Commands::Devices) => cmd_devices(),
-            Some(Commands::Update { check }) => cmd_update(check),
+            None => cmd_status(),
+            Some(Commands::Install { device }) => cmd_install(device.or(self.device)),
+            Some(Commands::Format { device }) => cmd_format(device.or(self.device)),
+            Some(Commands::Status) => cmd_status(),
             Some(Commands::Recover { device }) => cmd_recover(device.or(self.device)),
+            Some(Commands::Update { check }) => cmd_update(check),
         }
     }
 }
 
-/// List detected removable USB devices (does not require unlocking).
-fn cmd_devices() -> Result<()> {
+/// Resolve a device argument to a USB mount path: an explicit path is used
+/// as-is; with no argument, auto-picks the sole detected USB drive, or errors
+/// listing what was found.
+fn resolve_device_path(device: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(path) = device {
+        return Ok(path);
+    }
+    let devices = fob_host::device::enumerate_usb_devices();
+    if devices.len() == 1 {
+        return Ok(devices[0].path.clone());
+    }
+    if devices.is_empty() {
+        anyhow::bail!("No USB drives detected. Insert a USB drive and retry.");
+    }
+    let mut msg = String::from("Multiple USB drives detected — pick one with --device:\n");
+    for (i, d) in devices.iter().enumerate() {
+        msg.push_str(&format!(
+            "  [{}]  {}  {}\n",
+            i + 1,
+            d.name,
+            d.path.display()
+        ));
+    }
+    anyhow::bail!("{msg}");
+}
+
+/// Write the embedded web UI to the USB device path.
+fn write_web_ui(device_path: &std::path::Path) -> Result<()> {
+    let dest = device_path.join("index.html");
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("chflags")
+            .args(["nouchg", &dest.to_string_lossy()])
+            .status();
+    }
+    atomic_write(&dest, WEB_INDEX_HTML.as_bytes())?;
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("chflags")
+            .args(["uchg", &dest.to_string_lossy()])
+            .status();
+    }
+    Ok(())
+}
+
+/// `fob install` — put/refresh the browser vault on the USB. Non-destructive.
+fn cmd_install(device: Option<PathBuf>) -> Result<()> {
+    let mount = resolve_device_path(device)?;
+    write_web_ui(&mount)?;
+    println!(
+        "✓ Browser vault written to {}",
+        mount.join("index.html").display()
+    );
+    println!("  Open index.html (or vault.fob) on the USB to use Fob.");
+    Ok(())
+}
+
+/// `fob status` — list USB drives, which have a vault, and current version.
+fn cmd_status() -> Result<()> {
+    println!("Fob v{}", env!("CARGO_PKG_VERSION"));
     let devices = fob_host::device::enumerate_usb_devices();
     if devices.is_empty() {
         println!("No USB drives detected. Insert a USB drive and retry.");
@@ -101,47 +166,121 @@ fn cmd_devices() -> Result<()> {
     Ok(())
 }
 
-/// Resolve a device/vault argument to an actual `vault.fob` path: a
-/// directory (USB mount point) has `vault.fob` joined on; a path already
-/// ending in a file is used as-is. With no argument, auto-picks the sole
-/// detected USB drive with a vault, or errors listing what was found.
-fn resolve_vault_path(device: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(path) = device {
-        return Ok(if path.is_dir() {
-            path.join("vault.fob")
-        } else {
-            path
-        });
+/// `fob format` — format a USB drive and create a fresh v4/Argon2id vault.
+fn cmd_format(device: Option<PathBuf>) -> Result<()> {
+    use zeroize::Zeroize;
+
+    let mount = resolve_device_path(device)?;
+    let devices = fob_host::device::enumerate_usb_devices();
+    let dev = devices
+        .iter()
+        .find(|d| d.path == mount)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("{} is not a detected USB drive", mount.display()))?;
+
+    if dev.is_system_drive() {
+        anyhow::bail!("Refusing to format a system drive.");
     }
 
-    let candidates: Vec<_> = fob_host::device::enumerate_usb_devices()
-        .into_iter()
-        .filter(|d| d.has_fob_vault)
-        .collect();
+    print!(
+        "Format {} ({}) — this ERASES all data. Continue? [y/N] ",
+        dev.name,
+        dev.size_display()
+    );
+    std::io::stdout().flush()?;
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    if !input.trim().eq_ignore_ascii_case("y") {
+        println!("Aborted.");
+        return Ok(());
+    }
 
-    match candidates.as_slice() {
-        [only] => Ok(only.path.join("vault.fob")),
-        [] => Err(anyhow::anyhow!(
-            "no USB drive with a Fob vault detected — specify one with --device"
-        )),
-        many => Err(anyhow::anyhow!(
-            "multiple vaults found — specify one with --device:\n{}",
-            many.iter()
-                .map(|d| format!("  {}  ({})", d.path.display(), d.name))
-                .collect::<Vec<_>>()
-                .join("\n")
-        )),
+    fob_host::device::format_device(&dev)?;
+    println!("✓ Formatted as ExFAT (label FOB).");
+
+    // Re-find the mount point after formatting (macOS remounts automatically).
+    let mount = fob_host::device::find_mount_after_format(&dev.disk_node)
+        .filter(|p| p.exists())
+        .unwrap_or(mount);
+
+    // Read and confirm the main passphrase, enforcing the shared policy.
+    let mut main_pass = read_new_passphrase()?;
+
+    // Optional recovery key.
+    let mut params = fob_core::vault::VaultInitParams::new(
+        main_pass.as_bytes().to_vec(),
+        fob_core::format::DEFAULT_VAULT_SIZE,
+    );
+
+    print!("Generate a post-quantum recovery key? [y/N] ");
+    std::io::stdout().flush()?;
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    if input.trim().eq_ignore_ascii_case("y") {
+        let (pubkey, privkey) = fob_core::recovery::generate_recovery_keypair();
+        params.recovery_pubkey = Some(pubkey);
+        let display = fob_core::recovery::encode_private_key_for_display(&privkey)?;
+        println!("\nRecovery key (write this down now — it is shown only once):");
+        println!("{display}");
+        println!("The private key is never stored on disk.\n");
+        // privkey's X25519/ML-KEM secrets self-zeroize on drop.
+    }
+
+    let vault_bytes = fob_core::vault::init_vault(params)?;
+    atomic_write(&mount.join("vault.fob"), &vault_bytes)?;
+    write_web_ui(&mount)?;
+
+    main_pass.zeroize();
+    println!("✓ Vault created: {}", mount.join("vault.fob").display());
+    println!("  Open index.html on the USB to use Fob.");
+    Ok(())
+}
+
+/// Prompt for a new main passphrase (twice) and enforce the shared policy
+/// (fob-core::passphrase — same bar the browser enforces).
+fn read_new_passphrase() -> Result<String> {
+    use zeroize::Zeroize;
+
+    loop {
+        print!("Enter a new main passphrase (14+ chars, mixed): ");
+        std::io::stdout().flush()?;
+        let mut p1 = String::new();
+        std::io::stdin().read_line(&mut p1)?;
+        let mut p1 = p1.trim_end_matches(['\r', '\n']).to_string();
+
+        if let Some(reason) = fob_core::passphrase::rejection_reason(&p1) {
+            println!("Passphrase {reason}.");
+            p1.zeroize();
+            continue;
+        }
+
+        print!("Confirm passphrase: ");
+        std::io::stdout().flush()?;
+        let mut p2 = String::new();
+        std::io::stdin().read_line(&mut p2)?;
+        let mut p2 = p2.trim_end_matches(['\r', '\n']).to_string();
+
+        if p1 == p2 {
+            p2.zeroize();
+            return Ok(p1);
+        }
+        println!("Passphrases do not match.");
+        p1.zeroize();
+        p2.zeroize();
     }
 }
 
-/// Unlock a vault's Main slot with a recovery key and set a new main
-/// passphrase — for when the original passphrase is lost. Only the Main
-/// slot is recoverable this way; Decoy and Duress are unaffected.
+/// `fob recover` — unlock a vault's Main slot with a recovery key and set a
+/// new main passphrase.
 fn cmd_recover(device: Option<PathBuf>) -> Result<()> {
-    use std::io::Write as _;
     use zeroize::Zeroize;
 
-    let vault_path = resolve_vault_path(device)?;
+    let mount = resolve_device_path(device)?;
+    let vault_path = if mount.is_dir() {
+        mount.join("vault.fob")
+    } else {
+        mount
+    };
     let vault_bytes = std::fs::read(&vault_path)
         .map_err(|e| anyhow::anyhow!("couldn't read {}: {e}", vault_path.display()))?;
 
@@ -155,7 +294,7 @@ fn cmd_recover(device: Option<PathBuf>) -> Result<()> {
 
     let (_, blob) = fob_core::vault::recover_vault(&vault_bytes, &privkey)
         .map_err(|e| anyhow::anyhow!("recovery failed: {e}"))?;
-    // privkey's X25519/ML-KEM secrets self-zeroize on drop (see recovery.rs).
+    // privkey's X25519/ML-KEM secrets self-zeroize on drop.
     drop(privkey);
 
     println!(
@@ -163,14 +302,7 @@ fn cmd_recover(device: Option<PathBuf>) -> Result<()> {
         blob.entry_count()
     );
 
-    print!("Enter a new main passphrase: ");
-    std::io::stdout().flush()?;
-    let mut new_passphrase = String::new();
-    std::io::stdin().read_line(&mut new_passphrase)?;
-    let new_passphrase = new_passphrase.trim_end_matches(['\r', '\n']).to_string();
-    if let Some(reason) = fob_core::passphrase::rejection_reason(&new_passphrase) {
-        anyhow::bail!("passphrase {reason}");
-    }
+    let new_passphrase = read_new_passphrase()?;
 
     let mut vault_file = fob_core::vault::VaultFile::from_bytes(vault_bytes)?;
     let kdf_out = fob_core::kdf::derive_master(new_passphrase.as_bytes(), &vault_file.header)?;
@@ -186,29 +318,8 @@ fn cmd_recover(device: Option<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-/// Write the embedded web UI to the USB device path.
-pub fn write_web_ui(device_path: &std::path::Path) -> Result<()> {
-    let dest = device_path.join("index.html");
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("chflags")
-            .args(["nouchg", &dest.to_string_lossy()])
-            .status();
-    }
-    atomic_write(&dest, WEB_INDEX_HTML.as_bytes())?;
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("chflags")
-            .args(["uchg", &dest.to_string_lossy()])
-            .status();
-    }
-    Ok(())
-}
-
 /// Check GitHub for a newer release and optionally install it.
 fn cmd_update(check_only: bool) -> Result<()> {
-    use std::io::Write as _;
-
     let current = concat!("v", env!("CARGO_PKG_VERSION"));
     println!("Current version: {current}");
     print!("Checking for updates…  ");

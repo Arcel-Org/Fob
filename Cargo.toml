@@ -45,10 +45,6 @@ getrandom = { version = "0.2" }
 thiserror = { version = "2" }
 anyhow = { version = "1" }
 
-# TUI
-ratatui = { version = "0.30" }
-crossterm = { version = "0.29" }
-
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
 

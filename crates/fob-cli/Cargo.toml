@@ -3,7 +3,7 @@ name = "fob-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "Command-line TUI and USB device manager for Fob"
+description = "Fob USB device manager — install/format/status/recover only"
 default-run = "fob"
 
 [[bin]]
@@ -15,8 +15,6 @@ fob-core = { workspace = true }
 fob-host = { workspace = true }
 
 clap = { workspace = true }
-ratatui = { workspace = true }
-crossterm = { workspace = true }
 anyhow = { workspace = true }
 zeroize = { workspace = true }
 
