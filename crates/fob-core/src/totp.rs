@@ -1,11 +1,11 @@
 use hmac::{Hmac, KeyInit, Mac};
 use sha1::Sha1;
 use sha2::{Sha256, Sha512};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
     error::{Error, Result},
     types::{TotpAlgorithm, TotpEntry},
+    vault::unix_now,
 };
 
 type HmacSha1 = Hmac<Sha1>;
@@ -24,11 +24,7 @@ pub fn generate_at(entry: &TotpEntry, timestamp: u64) -> Result<String> {
 
 /// Generate a TOTP code using the current system time.
 pub fn generate_now(entry: &TotpEntry) -> Result<String> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| Error::InvalidTotp("system clock before Unix epoch".into()))?
-        .as_secs();
-    generate_at(entry, now)
+    generate_at(entry, unix_now())
 }
 
 /// Seconds remaining in the current TOTP window.
@@ -36,10 +32,7 @@ pub fn seconds_remaining(period: u32) -> Result<u32> {
     if period == 0 {
         return Err(Error::InvalidTotp("period must be non-zero".into()));
     }
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
+    let now = unix_now();
     let elapsed = (now % period as u64) as u32;
     Ok(period - elapsed)
 }

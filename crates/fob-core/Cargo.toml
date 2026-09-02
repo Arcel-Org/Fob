@@ -25,6 +25,20 @@ getrandom = { workspace = true }
 
 thiserror = { workspace = true }
 base32 = { workspace = true }
+argon2 = { workspace = true }
+ml-kem = { workspace = true }
+x25519-dalek = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# On wasm32-unknown-unknown the std SystemTime clock is unavailable (it
+# panics), so we switch `unix_now()` to the JS `Date.now` clock. Enabled by
+# fob-wasm. The js-sys dependency is target-gated so this never links on
+# native targets; the code path is likewise cfg-gated to wasm32 (see
+# vault.rs / totp.rs), so enabling the feature on native is a safe no-op.
+[features]
+wasm = ["dep:js-sys"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { version = "0.3", optional = true }

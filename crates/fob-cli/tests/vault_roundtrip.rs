@@ -13,11 +13,7 @@ fn save(
     path: &std::path::Path,
 ) {
     blob.touch();
-    let kdf_out = fob_core::kdf::derive_master(
-        passphrase.as_bytes(),
-        &vault_file.header.salt,
-        vault_file.header.kdf_iterations,
-    );
+    let kdf_out = fob_core::kdf::derive_master(passphrase.as_bytes(), &vault_file.header).unwrap();
     let keys = fob_core::kdf::derive_all_slot_keys(kdf_out.master_secret());
     vault_file
         .write_slot(slot, keys[slot.index()].bytes(), blob)

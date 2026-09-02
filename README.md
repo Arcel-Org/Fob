@@ -33,27 +33,36 @@ Fob turns any USB stick into a cryptographic security key. Plug it in, unlock wi
 
 ### Cryptographic primitives
 
-There is one vault format, used identically by the CLI and the browser vault
-— PBKDF2 (not a memory-hard KDF like Argon2id) is used specifically because
-WebCrypto has no native Argon2id primitive, and keeping one interoperable
-format was judged more valuable than a stronger KDF the browser couldn't run.
+There are two vault formats. v3 (PBKDF2, the only KDF WebCrypto can run
+natively) stays permanently supported and is the only format the browser
+vault reads or writes — one interoperable format was judged more valuable
+than a stronger KDF the browser couldn't run. v4, written by the CLI for
+every new vault, switches the default KDF to Argon2id (memory-hard, raising
+GPU/ASIC brute-force cost well above PBKDF2) and adds an optional hybrid
+post-quantum recovery key. A v4 vault can only be opened by the CLI, not the
+browser; a v3 vault opens in either.
 
 | Component | Algorithm |
 |---|---|
-| Key derivation | PBKDF2-HMAC-SHA256 — 310,000 iterations |
+| Key derivation | Argon2id (v4, CLI default) — 64 MiB / 3 passes / 4 lanes. PBKDF2-HMAC-SHA256 — 310,000 iterations (v3, browser-compatible, still supported) |
 | Encryption | AES-256-GCM |
 | Key separation | HKDF-SHA256, per vault slot |
-| Post-quantum | Planned — ML-KEM-1024 hybrid wrapping, not yet implemented |
+| Post-quantum | Optional recovery key — hybrid X25519 + ML-KEM-1024 (FIPS 203), wraps the master secret to an offline keypair generated at vault creation |
 | TOTP | RFC 6238 — HMAC-SHA1/SHA256/SHA512 |
+
+Lost your passphrase? If you generated a recovery key during setup, run
+`fob recover` and paste it in — it resets the main passphrase without
+needing the old one. There's no other recovery path; without a recovery key,
+a lost main passphrase means the Main slot's contents are gone for good.
 
 ### Threat model
 
 | Threat | Mitigation |
 |---|---|
-| USB stolen | PBKDF2 at 310k iterations raises the brute-force cost; weaker than a memory-hard KDF against GPU/ASIC attackers — choose a long passphrase |
+| USB stolen | v4 vaults use Argon2id (memory-hard), raising GPU/ASIC brute-force cost substantially over PBKDF2; v3 vaults (PBKDF2 at 310k iterations) remain weaker against GPU/ASIC attackers — choose a long passphrase either way |
 | Coercion | Decoy vault slot opens with its own independent, realistic-looking data |
 | Extreme coercion | Duress passphrase returns the same error as a wrong passphrase and wipes the local copy (logical wipe only — see [Known limitations](#known-limitations)) |
-| Quantum adversary | Not yet mitigated — ML-KEM-1024 hybrid wrapping is planned |
+| Quantum adversary | The passphrase-unlock path (PBKDF2/Argon2id → AES-256-GCM) was never asymmetric and already keeps ~128-bit security under Grover's algorithm — nothing to mitigate there. The optional recovery key is the vault's only asymmetric component and is post-quantum hybrid (X25519 + ML-KEM-1024) from day one |
 | Clipboard exfil | Auto-clears 30 seconds after any copy |
 | Memory dumps | Sensitive buffers zeroized and mlocked where possible |
 

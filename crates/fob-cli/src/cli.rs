@@ -2,8 +2,8 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use crate::fs_util::atomic_write;
 use crate::tui;
+use fob_host::fs_util::atomic_write;
 
 pub const WEB_INDEX_HTML: &str = include_str!("../../../web/index.html");
 
@@ -56,6 +56,11 @@ pub enum Commands {
         #[arg(long)]
         check: bool,
     },
+
+    /// Unlock a vault's Main slot using a recovery key instead of a
+    /// passphrase (see the "recovery key" prompt during `fob setup`), and
+    /// set a new main passphrase.
+    Recover { device: Option<PathBuf> },
 }
 
 impl Cli {
@@ -65,13 +70,14 @@ impl Cli {
             Some(Commands::Unlock { device }) => tui::run_tui(device.or(self.device)),
             Some(Commands::Devices) => cmd_devices(),
             Some(Commands::Update { check }) => cmd_update(check),
+            Some(Commands::Recover { device }) => cmd_recover(device.or(self.device)),
         }
     }
 }
 
 /// List detected removable USB devices (does not require unlocking).
 fn cmd_devices() -> Result<()> {
-    let devices = crate::device::enumerate_usb_devices();
+    let devices = fob_host::device::enumerate_usb_devices();
     if devices.is_empty() {
         println!("No USB drives detected. Insert a USB drive and retry.");
         return Ok(());
@@ -92,6 +98,91 @@ fn cmd_devices() -> Result<()> {
             vault
         );
     }
+    Ok(())
+}
+
+/// Resolve a device/vault argument to an actual `vault.fob` path: a
+/// directory (USB mount point) has `vault.fob` joined on; a path already
+/// ending in a file is used as-is. With no argument, auto-picks the sole
+/// detected USB drive with a vault, or errors listing what was found.
+fn resolve_vault_path(device: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(path) = device {
+        return Ok(if path.is_dir() {
+            path.join("vault.fob")
+        } else {
+            path
+        });
+    }
+
+    let candidates: Vec<_> = fob_host::device::enumerate_usb_devices()
+        .into_iter()
+        .filter(|d| d.has_fob_vault)
+        .collect();
+
+    match candidates.as_slice() {
+        [only] => Ok(only.path.join("vault.fob")),
+        [] => Err(anyhow::anyhow!(
+            "no USB drive with a Fob vault detected — specify one with --device"
+        )),
+        many => Err(anyhow::anyhow!(
+            "multiple vaults found — specify one with --device:\n{}",
+            many.iter()
+                .map(|d| format!("  {}  ({})", d.path.display(), d.name))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )),
+    }
+}
+
+/// Unlock a vault's Main slot with a recovery key and set a new main
+/// passphrase — for when the original passphrase is lost. Only the Main
+/// slot is recoverable this way; Decoy and Duress are unaffected.
+fn cmd_recover(device: Option<PathBuf>) -> Result<()> {
+    use std::io::Write as _;
+    use zeroize::Zeroize;
+
+    let vault_path = resolve_vault_path(device)?;
+    let vault_bytes = std::fs::read(&vault_path)
+        .map_err(|e| anyhow::anyhow!("couldn't read {}: {e}", vault_path.display()))?;
+
+    print!("Paste your Fob recovery key: ");
+    std::io::stdout().flush()?;
+    let mut recovery_input = String::new();
+    std::io::stdin().read_line(&mut recovery_input)?;
+    let privkey = fob_core::recovery::decode_private_key_from_display(&recovery_input)
+        .map_err(|e| anyhow::anyhow!("invalid recovery key: {e}"))?;
+    recovery_input.zeroize();
+
+    let (_, blob) = fob_core::vault::recover_vault(&vault_bytes, &privkey)
+        .map_err(|e| anyhow::anyhow!("recovery failed: {e}"))?;
+    // privkey's X25519/ML-KEM secrets self-zeroize on drop (see recovery.rs).
+    drop(privkey);
+
+    println!(
+        "Recovery key accepted — {} entries found.",
+        blob.entry_count()
+    );
+
+    print!("Enter a new main passphrase: ");
+    std::io::stdout().flush()?;
+    let mut new_passphrase = String::new();
+    std::io::stdin().read_line(&mut new_passphrase)?;
+    let new_passphrase = new_passphrase.trim_end_matches(['\r', '\n']).to_string();
+    if new_passphrase.is_empty() {
+        anyhow::bail!("passphrase cannot be empty");
+    }
+
+    let mut vault_file = fob_core::vault::VaultFile::from_bytes(vault_bytes)?;
+    let kdf_out = fob_core::kdf::derive_master(new_passphrase.as_bytes(), &vault_file.header)?;
+    let slot_keys = fob_core::kdf::derive_all_slot_keys(kdf_out.master_secret());
+    vault_file.write_slot(
+        fob_core::vault::SlotKind::Main,
+        slot_keys[fob_core::vault::SlotKind::Main.index()].bytes(),
+        &blob,
+    )?;
+    atomic_write(&vault_path, &vault_file.data)?;
+
+    println!("Main passphrase reset. The vault now unlocks with the new passphrase.");
     Ok(())
 }
 

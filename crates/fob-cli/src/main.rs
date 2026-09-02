@@ -1,8 +1,4 @@
 mod cli;
-mod clipboard;
-mod device;
-mod fs_util;
-mod ssh_agent;
 mod tui;
 
 use anyhow::Result;

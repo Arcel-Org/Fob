@@ -3,3 +3,7 @@
 *.log
 .env
 __pycache__/
+# Local cargo home (root FS is read-only, so we keep a writable one in-tree)
+.cargo-home/
+# Generated wasm-bindgen glue — rebuilt from crates/fob-wasm
+web/wasm-out/

@@ -1,5 +1,7 @@
+use hkdf::Hkdf;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
 use std::time::{SystemTime, UNIX_EPOCH};
 use zeroize::Zeroize;
 
@@ -7,19 +9,70 @@ use crate::{
     aead,
     error::{Error, Result},
     format::{
-        cell_offset, cell_size, VaultHeader, DEFAULT_KDF_ITERATIONS, FORMAT_VERSION, HEADER_SIZE,
-        MAX_VAULT_SIZE, MIN_VAULT_SIZE,
+        cell_offset, cell_size, KdfAlgorithm, VaultHeader, DEFAULT_ARGON2_MEMORY_KIB,
+        DEFAULT_ARGON2_PARALLELISM, DEFAULT_ARGON2_TIME_COST, FORMAT_VERSION, HEADER_SALT_LEN,
+        HEADER_SALT_OFFSET, HEADER_SIZE, MAX_VAULT_SIZE, MIN_VAULT_SIZE, RECOVERY_SLOT_INDEX,
     },
-    kdf,
+    kdf, recovery,
     types::{NoteEntry, PasswordEntry, SshKeyEntry, TotpEntry},
 };
 
+/// KDF choice and parameters for a vault, used both at creation
+/// (`VaultInitParams::kdf_params`) and encoded into the vault header.
+#[derive(Debug, Clone)]
+pub struct KdfParams {
+    pub algorithm: KdfAlgorithm,
+    /// PBKDF2 iterations, or Argon2id time_cost — interpretation depends on
+    /// `algorithm`.
+    pub time_cost: u32,
+    /// Meaningful only when `algorithm == Argon2id`.
+    pub memory_kib: u32,
+    /// Meaningful only when `algorithm == Argon2id`.
+    pub parallelism: u32,
+}
+
+impl KdfParams {
+    /// The default for new vaults: Argon2id at the RFC 9106 "second
+    /// recommended" profile.
+    pub fn default_argon2id() -> Self {
+        Self {
+            algorithm: KdfAlgorithm::Argon2id,
+            time_cost: DEFAULT_ARGON2_TIME_COST,
+            memory_kib: DEFAULT_ARGON2_MEMORY_KIB,
+            parallelism: DEFAULT_ARGON2_PARALLELISM,
+        }
+    }
+
+    /// PBKDF2-HMAC-SHA256 with the given iteration count — used for v3
+    /// vaults, browser-compatible vaults, and fast test fixtures.
+    pub fn pbkdf2(iterations: u32) -> Self {
+        Self {
+            algorithm: KdfAlgorithm::Pbkdf2Sha256,
+            time_cost: iterations,
+            memory_kib: 0,
+            parallelism: 0,
+        }
+    }
+}
+
 /// Returns current Unix timestamp in seconds.
+///
+/// On the `wasm` feature build (wasm32-unknown-unknown) `std::time`'s
+/// `SystemTime` is unavailable and panics, so we read the JS clock instead.
+/// Everywhere else we use the std clock.
 pub fn unix_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
+    #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+    {
+        (js_sys::Date::now() / 1000.0) as u64
+    }
+
+    #[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
+    {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    }
 }
 
 /// Which vault slot an opened vault lives in.
@@ -126,7 +179,7 @@ impl VaultFile {
     /// nonce is generated fresh at write time (see `write_slot`), not
     /// stored in the header. All slot cells are random and indistinguishable
     /// from ciphertext.
-    pub fn create_fresh(vault_size: usize, kdf_iterations: u32) -> Result<Self> {
+    pub fn create_fresh(vault_size: usize, kdf_params: &KdfParams) -> Result<Self> {
         if vault_size < MIN_VAULT_SIZE {
             return Err(Error::Format(format!(
                 "vault size {vault_size} is below the minimum of {MIN_VAULT_SIZE}"
@@ -141,17 +194,35 @@ impl VaultFile {
         let mut data = vec![0u8; vault_size];
         getrandom::getrandom(&mut data).map_err(|_| Error::Encrypt)?;
 
-        let salt: [u8; 32] = data[12..44].try_into().unwrap();
+        let salt: [u8; HEADER_SALT_LEN] = data
+            [HEADER_SALT_OFFSET..HEADER_SALT_OFFSET + HEADER_SALT_LEN]
+            .try_into()
+            .unwrap();
 
         let header = VaultHeader {
             format_version: FORMAT_VERSION,
-            kdf_iterations,
+            kdf_algorithm: kdf_params.algorithm,
+            kdf_time_cost: kdf_params.time_cost,
+            argon2_memory_kib: kdf_params.memory_kib,
+            argon2_parallelism: kdf_params.parallelism,
             salt,
+            recovery_enabled: false,
         };
         let header_bytes = header.to_bytes();
         data[..HEADER_SIZE].copy_from_slice(&header_bytes);
 
         Ok(Self { data, header })
+    }
+
+    /// Flip `recovery_enabled` and re-commit the header to `data`. Must be
+    /// called before any slot is written, since the header bytes are used
+    /// as AEAD associated data on every slot (including the recovery slot)
+    /// — every slot in a vault must be encrypted against the same,
+    /// final header.
+    pub fn set_recovery_enabled(&mut self, enabled: bool) {
+        self.header.recovery_enabled = enabled;
+        let header_bytes = self.header.to_bytes();
+        self.data[..HEADER_SIZE].copy_from_slice(&header_bytes);
     }
 
     /// Parse a vault file from existing bytes (e.g., read from USB).
@@ -240,6 +311,82 @@ impl VaultFile {
 
         VaultBlob::from_json(&plaintext[LENGTH_PREFIX..json_end])
     }
+
+    /// Write raw recovery-wrap bytes (see `recovery::RecoveryWrappedBlob`)
+    /// into the recovery slot cell, padded to `cell_size` the same way
+    /// `write_slot` pads a `VaultBlob` — so a recovery-enabled vault's 4th
+    /// cell is exactly as indistinguishable from random as the other three.
+    ///
+    /// Unlike `write_slot`, this isn't keyed by a passphrase-derived slot
+    /// key: the confidentiality of the wrapped data comes entirely from the
+    /// hybrid KEM wrap itself (see `recovery::wrap_secret_for_recovery`).
+    /// The key used here only needs to exist so the cell has the same
+    /// nonce||ciphertext||tag shape as every other cell; it's derived from
+    /// the (already public) header salt, not a secret.
+    pub fn write_recovery_slot(&mut self, blob_bytes: &[u8]) -> Result<()> {
+        let cell_sz = cell_size(self.data.len());
+        let plaintext_capacity = cell_sz.saturating_sub(aead::GCM_NONCE_LEN + aead::GCM_TAG_LEN);
+        const LENGTH_PREFIX: usize = 8;
+
+        if blob_bytes.len() + LENGTH_PREFIX > plaintext_capacity {
+            return Err(Error::Format(format!(
+                "recovery data ({} bytes) does not fit this vault's slot cell \
+                 ({} bytes available) — use a larger vault size",
+                blob_bytes.len(),
+                plaintext_capacity.saturating_sub(LENGTH_PREFIX)
+            )));
+        }
+
+        let mut padded = zeroize::Zeroizing::new(vec![0u8; plaintext_capacity]);
+        getrandom::getrandom(&mut padded).map_err(|_| Error::Encrypt)?;
+        padded[..LENGTH_PREFIX].copy_from_slice(&(blob_bytes.len() as u64).to_le_bytes());
+        padded[LENGTH_PREFIX..LENGTH_PREFIX + blob_bytes.len()].copy_from_slice(blob_bytes);
+
+        let key = recovery_slot_shape_key(&self.header.salt);
+        let aad = &self.header.to_bytes();
+        let ciphertext = aead::encrypt(&key, &padded, aad)?;
+
+        let offset = cell_offset(self.data.len(), RECOVERY_SLOT_INDEX);
+        self.data[offset..offset + cell_sz].copy_from_slice(&ciphertext);
+
+        Ok(())
+    }
+
+    /// Read back what `write_recovery_slot` wrote.
+    pub fn read_recovery_slot(&self) -> Result<Vec<u8>> {
+        let cell_sz = cell_size(self.data.len());
+        let offset = cell_offset(self.data.len(), RECOVERY_SLOT_INDEX);
+        let aad = &self.header.to_bytes();
+        let cell = &self.data[offset..offset + cell_sz];
+
+        let key = recovery_slot_shape_key(&self.header.salt);
+        let plaintext = zeroize::Zeroizing::new(aead::decrypt(&key, cell, aad)?);
+
+        const LENGTH_PREFIX: usize = 8;
+        if plaintext.len() < LENGTH_PREFIX {
+            return Err(Error::Format("decrypted recovery cell too small".into()));
+        }
+        let len = u64::from_le_bytes(plaintext[..LENGTH_PREFIX].try_into().unwrap()) as usize;
+        let end = LENGTH_PREFIX + len;
+        if end > plaintext.len() {
+            return Err(Error::Format(
+                "recovery blob length field exceeds plaintext".into(),
+            ));
+        }
+
+        Ok(plaintext[LENGTH_PREFIX..end].to_vec())
+    }
+}
+
+/// Non-secret key giving the recovery slot cell the same
+/// nonce||ciphertext||tag shape as every other slot cell. Derived from the
+/// (already public) header salt — see `VaultFile::write_recovery_slot`.
+fn recovery_slot_shape_key(salt: &[u8; 32]) -> [u8; 32] {
+    let hk = Hkdf::<Sha256>::new(None, salt);
+    let mut key = [0u8; 32];
+    hk.expand(b"fob/v1/recovery-slot-shape", &mut key)
+        .expect("HKDF expand output length is always valid for 32 bytes");
+    key
 }
 
 /// Parameters for creating a new vault.
@@ -249,13 +396,18 @@ pub struct VaultInitParams {
     pub duress_passphrase: Option<Vec<u8>>,
     pub vault_size: usize,
     pub decoy_blob: Option<VaultBlob>,
-    /// PBKDF2 iteration count. Use `format::DEFAULT_KDF_ITERATIONS` unless
-    /// you have a specific reason to override it (e.g. fast tests).
-    pub kdf_iterations: u32,
+    /// KDF algorithm and parameters. Use `KdfParams::default_argon2id()`
+    /// unless you have a specific reason to override it (e.g. fast tests,
+    /// or PBKDF2 for browser-vault compatibility).
+    pub kdf_params: KdfParams,
+    /// If set, the master secret is additionally hybrid-wrapped
+    /// (X25519 + ML-KEM-1024) to this recovery public key and stored in the
+    /// vault's recovery slot — see `crate::recovery`.
+    pub recovery_pubkey: Option<recovery::RecoveryPublicKey>,
 }
 
 impl VaultInitParams {
-    /// Convenience constructor using the default iteration count.
+    /// Convenience constructor: Argon2id KDF, no decoy/duress/recovery.
     pub fn new(main_passphrase: Vec<u8>, vault_size: usize) -> Self {
         Self {
             main_passphrase,
@@ -263,7 +415,8 @@ impl VaultInitParams {
             duress_passphrase: None,
             vault_size,
             decoy_blob: None,
-            kdf_iterations: DEFAULT_KDF_ITERATIONS,
+            kdf_params: KdfParams::default_argon2id(),
+            recovery_pubkey: None,
         }
     }
 }
@@ -290,24 +443,31 @@ pub fn init_vault(params: VaultInitParams) -> Result<Vec<u8>> {
         params.duress_passphrase.as_deref(),
     )?;
 
-    let mut vault_file = VaultFile::create_fresh(params.vault_size, params.kdf_iterations)?;
+    let mut vault_file = VaultFile::create_fresh(params.vault_size, &params.kdf_params)?;
+    if params.recovery_pubkey.is_some() {
+        // Must happen before any slot is written — the header (including
+        // this flag) is used as AEAD associated data on every slot.
+        vault_file.set_recovery_enabled(true);
+    }
     let fingerprint = vault_fingerprint(&vault_file.header.salt);
 
     // Derive main slot key and write the (empty) main vault.
-    let main_kdf = kdf::derive_master(
-        &params.main_passphrase,
-        &vault_file.header.salt,
-        params.kdf_iterations,
-    );
+    let main_kdf = kdf::derive_master(&params.main_passphrase, &vault_file.header)?;
     let main_keys = kdf::derive_all_slot_keys(main_kdf.master_secret());
     let mut main_blob = VaultBlob::new();
     main_blob.fingerprint = fingerprint.clone();
     vault_file.write_slot(SlotKind::Main, main_keys[0].bytes(), &main_blob)?;
 
+    if let Some(recovery_pubkey) = &params.recovery_pubkey {
+        let aad = vault_file.header.to_bytes();
+        let wrapped =
+            recovery::wrap_secret_for_recovery(main_kdf.master_secret(), recovery_pubkey, &aad)?;
+        vault_file.write_recovery_slot(&wrapped.to_bytes())?;
+    }
+
     // Write decoy slot if passphrase provided.
     if let Some(decoy_pass) = &params.decoy_passphrase {
-        let decoy_kdf =
-            kdf::derive_master(decoy_pass, &vault_file.header.salt, params.kdf_iterations);
+        let decoy_kdf = kdf::derive_master(decoy_pass, &vault_file.header)?;
         let decoy_keys = kdf::derive_all_slot_keys(decoy_kdf.master_secret());
         // Fall back to a freshly-initialized (not zeroed-out) blob — a decoy
         // with version:0/created:0 would be an obvious tell that it's a stub.
@@ -321,8 +481,7 @@ pub fn init_vault(params: VaultInitParams) -> Result<Vec<u8>> {
 
     // Write duress slot if passphrase provided.
     if let Some(duress_pass) = &params.duress_passphrase {
-        let duress_kdf =
-            kdf::derive_master(duress_pass, &vault_file.header.salt, params.kdf_iterations);
+        let duress_kdf = kdf::derive_master(duress_pass, &vault_file.header)?;
         let duress_keys = kdf::derive_all_slot_keys(duress_kdf.master_secret());
         // Duress blob is deliberately empty — opening it triggers wipe.
         let duress_blob = VaultBlob::new();
@@ -330,6 +489,31 @@ pub fn init_vault(params: VaultInitParams) -> Result<Vec<u8>> {
     }
 
     Ok(vault_file.data)
+}
+
+/// Attempt to unlock a vault using a previously generated recovery private
+/// key instead of a passphrase. Only the Main slot is recoverable this way
+/// — Decoy and Duress derive from independent passphrases and are
+/// unaffected by recovery-key possession.
+pub fn recover_vault(
+    vault_bytes: &[u8],
+    privkey: &recovery::RecoveryPrivateKey,
+) -> Result<(SlotKind, VaultBlob)> {
+    let vault_file = VaultFile::from_bytes(vault_bytes.to_vec())?;
+    if !vault_file.header.recovery_enabled {
+        return Err(Error::Format(
+            "this vault has no recovery key configured".into(),
+        ));
+    }
+
+    let aad = vault_file.header.to_bytes();
+    let blob_bytes = vault_file.read_recovery_slot()?;
+    let wrapped = recovery::RecoveryWrappedBlob::from_bytes(&blob_bytes)?;
+    let master_secret = recovery::unwrap_secret_with_recovery(&wrapped, privkey, &aad)?;
+
+    let slot_keys = kdf::derive_all_slot_keys(&master_secret);
+    let blob = vault_file.read_slot(SlotKind::Main, slot_keys[0].bytes())?;
+    Ok((SlotKind::Main, blob))
 }
 
 /// Attempt to unlock a vault with a passphrase.
@@ -358,11 +542,7 @@ fn unlock_vault_inner(
     duress_wipe_path: Option<&std::path::Path>,
 ) -> Result<(SlotKind, VaultBlob)> {
     let vault_file = VaultFile::from_bytes(vault_bytes.to_vec())?;
-    let kdf_out = kdf::derive_master(
-        passphrase,
-        &vault_file.header.salt,
-        vault_file.header.kdf_iterations,
-    );
+    let kdf_out = kdf::derive_master(passphrase, &vault_file.header)?;
     let slot_keys = kdf::derive_all_slot_keys(kdf_out.master_secret());
 
     // Always attempt all three slots so timing does not reveal which slot matched.
@@ -455,7 +635,8 @@ mod tests {
             duress_passphrase: None,
             vault_size: TEST_VAULT_SIZE,
             decoy_blob: None,
-            kdf_iterations: TEST_ITERATIONS,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: None,
         })
         .unwrap()
     }
@@ -493,7 +674,8 @@ mod tests {
             duress_passphrase: None,
             vault_size: TEST_VAULT_SIZE,
             decoy_blob: Some(decoy_blob),
-            kdf_iterations: TEST_ITERATIONS,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: None,
         })
         .unwrap();
 
@@ -518,20 +700,21 @@ mod tests {
             duress_passphrase: None,
             vault_size: TEST_VAULT_SIZE,
             decoy_blob: None,
-            kdf_iterations: TEST_ITERATIONS,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: None,
         })
         .unwrap();
 
         // Main key should not open decoy slot.
         let vault_file = VaultFile::from_bytes(vault.clone()).unwrap();
-        let main_kdf = kdf::derive_master(main_pass, &vault_file.header.salt, TEST_ITERATIONS);
+        let main_kdf = kdf::derive_master(main_pass, &vault_file.header).unwrap();
         let main_keys = kdf::derive_all_slot_keys(main_kdf.master_secret());
         assert!(vault_file
             .read_slot(SlotKind::Decoy, main_keys[1].bytes())
             .is_err());
 
         // Decoy key should not open main slot.
-        let decoy_kdf = kdf::derive_master(decoy_pass, &vault_file.header.salt, TEST_ITERATIONS);
+        let decoy_kdf = kdf::derive_master(decoy_pass, &vault_file.header).unwrap();
         let decoy_keys = kdf::derive_all_slot_keys(decoy_kdf.master_secret());
         assert!(vault_file
             .read_slot(SlotKind::Main, decoy_keys[0].bytes())
@@ -602,7 +785,8 @@ mod tests {
             duress_passphrase: None,
             vault_size: TEST_VAULT_SIZE,
             decoy_blob: None,
-            kdf_iterations: TEST_ITERATIONS,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: None,
         });
         assert!(result.is_err());
     }
@@ -619,7 +803,8 @@ mod tests {
             duress_passphrase: None,
             vault_size,
             decoy_blob: None,
-            kdf_iterations: TEST_ITERATIONS,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: None,
         })
         .unwrap();
 
@@ -630,7 +815,7 @@ mod tests {
         blob.touch();
 
         let mut vault_file = VaultFile::from_bytes(vault_bytes).unwrap();
-        let kdf_out = kdf::derive_master(pass, &vault_file.header.salt, TEST_ITERATIONS);
+        let kdf_out = kdf::derive_master(pass, &vault_file.header).unwrap();
         let slot_keys = kdf::derive_all_slot_keys(kdf_out.master_secret());
         vault_file
             .write_slot(slot, slot_keys[slot.index()].bytes(), &blob)
@@ -657,12 +842,13 @@ mod tests {
             duress_passphrase: None,
             vault_size: TEST_VAULT_SIZE,
             decoy_blob: None,
-            kdf_iterations: TEST_ITERATIONS,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: None,
         })
         .unwrap();
 
         let mut vault_file = VaultFile::from_bytes(vault_bytes).unwrap();
-        let kdf_out = kdf::derive_master(pass, &vault_file.header.salt, TEST_ITERATIONS);
+        let kdf_out = kdf::derive_master(pass, &vault_file.header).unwrap();
         let slot_keys = kdf::derive_all_slot_keys(kdf_out.master_secret());
         let slot = SlotKind::Main;
         let key = slot_keys[slot.index()].bytes();
@@ -704,7 +890,8 @@ mod tests {
             duress_passphrase: Some(b"duress-pass".to_vec()),
             vault_size: TEST_VAULT_SIZE,
             decoy_blob: None,
-            kdf_iterations: TEST_ITERATIONS,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: None,
         })
         .unwrap();
 
@@ -722,7 +909,8 @@ mod tests {
 
     #[test]
     fn create_fresh_rejects_oversized_vault() {
-        let result = VaultFile::create_fresh(MAX_VAULT_SIZE + 1, TEST_ITERATIONS);
+        let result =
+            VaultFile::create_fresh(MAX_VAULT_SIZE + 1, &KdfParams::pbkdf2(TEST_ITERATIONS));
         assert!(result.is_err(), "vault_size above MAX_VAULT_SIZE must fail");
     }
 
@@ -759,5 +947,182 @@ mod tests {
             ),
             Ok(_) => panic!("expected an error for an undersized vault file"),
         }
+    }
+
+    // Small, fast Argon2id params for tests — not a security recommendation.
+    fn test_argon2id_params() -> KdfParams {
+        KdfParams {
+            algorithm: KdfAlgorithm::Argon2id,
+            time_cost: 1,
+            memory_kib: 8 * 1024,
+            parallelism: 1,
+        }
+    }
+
+    #[test]
+    fn init_and_unlock_main_with_argon2id() {
+        let vault = init_vault(VaultInitParams {
+            main_passphrase: b"correct-horse-battery-staple".to_vec(),
+            decoy_passphrase: None,
+            duress_passphrase: None,
+            vault_size: TEST_VAULT_SIZE,
+            decoy_blob: None,
+            kdf_params: test_argon2id_params(),
+            recovery_pubkey: None,
+        })
+        .unwrap();
+
+        let (slot, blob) = unlock_vault(&vault, b"correct-horse-battery-staple").unwrap();
+        assert_eq!(slot, SlotKind::Main);
+        assert_eq!(blob.version, FORMAT_VERSION);
+
+        let header = VaultHeader::parse(&vault).unwrap();
+        assert_eq!(header.kdf_algorithm, KdfAlgorithm::Argon2id);
+    }
+
+    #[test]
+    fn new_vaults_default_to_argon2id() {
+        let vault = init_vault(VaultInitParams::new(b"pw".to_vec(), TEST_VAULT_SIZE)).unwrap();
+        let header = VaultHeader::parse(&vault).unwrap();
+        assert_eq!(header.kdf_algorithm, KdfAlgorithm::Argon2id);
+        assert_eq!(header.format_version, FORMAT_VERSION);
+    }
+
+    #[test]
+    fn recovery_key_unlocks_main_slot() {
+        let (pubkey, privkey) = recovery::generate_recovery_keypair();
+        let vault = init_vault(VaultInitParams {
+            main_passphrase: b"main-pass".to_vec(),
+            decoy_passphrase: None,
+            duress_passphrase: None,
+            vault_size: TEST_VAULT_SIZE,
+            decoy_blob: None,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: Some(pubkey),
+        })
+        .unwrap();
+
+        let header = VaultHeader::parse(&vault).unwrap();
+        assert!(header.recovery_enabled);
+
+        let (slot, blob) = recover_vault(&vault, &privkey).unwrap();
+        assert_eq!(slot, SlotKind::Main);
+        assert_eq!(blob.version, FORMAT_VERSION);
+
+        // Passphrase unlock still works normally alongside recovery.
+        let (slot, _) = unlock_vault(&vault, b"main-pass").unwrap();
+        assert_eq!(slot, SlotKind::Main);
+    }
+
+    #[test]
+    fn recovery_reflects_saved_entries() {
+        let (pubkey, privkey) = recovery::generate_recovery_keypair();
+        let pass = b"main-pass";
+        let vault_bytes = init_vault(VaultInitParams {
+            main_passphrase: pass.to_vec(),
+            decoy_passphrase: None,
+            duress_passphrase: None,
+            vault_size: TEST_VAULT_SIZE,
+            decoy_blob: None,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: Some(pubkey),
+        })
+        .unwrap();
+
+        let (slot, mut blob) = unlock_vault(&vault_bytes, pass).unwrap();
+        blob.passwords
+            .push(PasswordEntry::new("GitHub", "alice", "gh-secret"));
+
+        let mut vault_file = VaultFile::from_bytes(vault_bytes).unwrap();
+        let kdf_out = kdf::derive_master(pass, &vault_file.header).unwrap();
+        let slot_keys = kdf::derive_all_slot_keys(kdf_out.master_secret());
+        vault_file
+            .write_slot(slot, slot_keys[slot.index()].bytes(), &blob)
+            .unwrap();
+
+        let (_, recovered) = recover_vault(&vault_file.data, &privkey).unwrap();
+        assert_eq!(recovered.passwords.len(), 1);
+        assert_eq!(recovered.passwords[0].name, "GitHub");
+    }
+
+    #[test]
+    fn wrong_recovery_key_fails() {
+        let (pubkey, _correct_privkey) = recovery::generate_recovery_keypair();
+        let (_, wrong_privkey) = recovery::generate_recovery_keypair();
+        let vault = init_vault(VaultInitParams {
+            main_passphrase: b"main-pass".to_vec(),
+            decoy_passphrase: None,
+            duress_passphrase: None,
+            vault_size: TEST_VAULT_SIZE,
+            decoy_blob: None,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: Some(pubkey),
+        })
+        .unwrap();
+
+        assert!(recover_vault(&vault, &wrong_privkey).is_err());
+    }
+
+    #[test]
+    fn recovery_disabled_vault_rejects_recovery_attempt() {
+        let (_pubkey, privkey) = recovery::generate_recovery_keypair();
+        let vault = simple_vault(b"main-pass"); // no recovery configured
+        let err = recover_vault(&vault, &privkey).unwrap_err();
+        assert!(format!("{err}").contains("no recovery key configured"));
+    }
+
+    #[test]
+    fn non_recovery_vault_reserved_slot_is_unaffected() {
+        // Regression: a vault created without recovery must leave slot 3
+        // exactly as before — pure random, not recovery-shaped.
+        let vault = simple_vault(b"main-pass");
+        let header = VaultHeader::parse(&vault).unwrap();
+        assert!(!header.recovery_enabled);
+    }
+
+    #[test]
+    fn small_vault_rejects_recovery_enrollment() {
+        let (pubkey, _privkey) = recovery::generate_recovery_keypair();
+        // MIN_VAULT_SIZE cells are far too small to hold a ~1.6KB recovery
+        // blob; enabling recovery on one must fail cleanly, not panic or
+        // silently truncate.
+        let result = init_vault(VaultInitParams {
+            main_passphrase: b"pw".to_vec(),
+            decoy_passphrase: None,
+            duress_passphrase: None,
+            vault_size: MIN_VAULT_SIZE,
+            decoy_blob: None,
+            kdf_params: KdfParams::pbkdf2(TEST_ITERATIONS),
+            recovery_pubkey: Some(pubkey),
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn unlock_always_attempts_all_three_slots_regardless_of_kdf_algorithm() {
+        // Timing-uniformity invariant (see unlock_vault_inner's comment)
+        // must hold under Argon2id too, not just PBKDF2: a single KDF
+        // derivation, then all three slots attempted regardless of match.
+        let vault = init_vault(VaultInitParams {
+            main_passphrase: b"main-pass".to_vec(),
+            decoy_passphrase: Some(b"decoy-pass".to_vec()),
+            duress_passphrase: Some(b"duress-pass".to_vec()),
+            vault_size: TEST_VAULT_SIZE,
+            decoy_blob: None,
+            kdf_params: test_argon2id_params(),
+            recovery_pubkey: None,
+        })
+        .unwrap();
+
+        assert!(matches!(
+            unlock_vault(&vault, b"main-pass"),
+            Ok((SlotKind::Main, _))
+        ));
+        assert!(matches!(
+            unlock_vault(&vault, b"decoy-pass"),
+            Ok((SlotKind::Decoy, _))
+        ));
+        assert!(unlock_vault(&vault, b"duress-pass").is_err());
+        assert!(unlock_vault(&vault, b"totally-wrong").is_err());
     }
 }

@@ -1,6 +1,6 @@
 use zeroize::Zeroize;
 
-use crate::fs_util::atomic_write;
+use fob_host::fs_util::atomic_write;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Screen {
@@ -24,7 +24,7 @@ pub enum WizardStep {
 
 pub struct AppState {
     pub screen: Screen,
-    pub devices: Vec<crate::device::UsbDevice>,
+    pub devices: Vec<fob_host::device::UsbDevice>,
     pub selected_device: usize,
     pub boot_tick: u8,
     pub wizard: WizardState,
@@ -42,6 +42,13 @@ pub struct WizardState {
     pub field: usize,
     pub cursor: usize,
     pub mismatch_flash: u8,
+    /// Opt-in: generate a hybrid X25519+ML-KEM-1024 post-quantum recovery
+    /// key alongside the vault (toggled at the Confirm step).
+    pub recovery_enabled: bool,
+    /// The recovery private key, encoded for one-time display, set after a
+    /// successful `run_vault_init` when `recovery_enabled` was set. Shown
+    /// once on the Done screen — never written to disk.
+    pub recovery_key_display: Option<String>,
 }
 
 #[derive(Default)]
@@ -226,7 +233,7 @@ pub struct DashboardState {
     /// Running SSH agent for this session, if `fob-agent` could be spawned.
     /// `None` means no SSH keys yet, or the agent binary/socket setup failed
     /// (`status` carries the reason in the latter case).
-    pub ssh_agent: Option<crate::ssh_agent::SshAgentHandle>,
+    pub ssh_agent: Option<fob_host::ssh_agent::SshAgentHandle>,
     /// What's currently on the clipboard (so we only clear it if it's still
     /// what we put there) and when to clear it.
     pub clipboard: Option<(String, std::time::Instant)>,
@@ -236,25 +243,23 @@ impl Drop for DashboardState {
     fn drop(&mut self) {
         self.passphrase.zeroize();
         if let Some((text, _)) = &self.clipboard {
-            let _ = crate::clipboard::clear_if_unchanged(text);
+            let _ = fob_host::clipboard::clear_if_unchanged(text);
         }
     }
 }
 
 impl DashboardState {
     /// Re-derive this vault's slot key from the held passphrase. Cheap only
-    /// relative to how the vault was configured — this repeats the PBKDF2
-    /// work on every save, matching the design used throughout fob-core.
+    /// relative to how the vault was configured — this repeats the
+    /// PBKDF2/Argon2id work on every save, matching the design used
+    /// throughout fob-core.
     ///
     /// Returns a `LockedSecret` (mlocked + zeroized-on-drop), not a bare
     /// `[u8; 32]` — this is a real AES-256-GCM key capable of decrypting the
     /// whole vault, not incidental data.
-    pub fn slot_key(&self) -> fob_core::mem::LockedSecret<32> {
-        let kdf_out = fob_core::kdf::derive_master(
-            self.passphrase.as_bytes(),
-            &self.vault_file.header.salt,
-            self.vault_file.header.kdf_iterations,
-        );
+    pub fn slot_key(&self) -> anyhow::Result<fob_core::mem::LockedSecret<32>> {
+        let kdf_out =
+            fob_core::kdf::derive_master(self.passphrase.as_bytes(), &self.vault_file.header)?;
         let mut keys = fob_core::kdf::derive_all_slot_keys(kdf_out.master_secret());
         let idx = self.slot.index();
         // Swap the wanted key out with a zero-filled placeholder rather than
@@ -262,13 +267,16 @@ impl DashboardState {
         // stays the only live copy — the other three (already useless once
         // separated from `keys`) get dropped, zeroized, and munlocked as
         // this array goes out of scope.
-        std::mem::replace(&mut keys[idx], fob_core::mem::LockedSecret::new([0u8; 32]))
+        Ok(std::mem::replace(
+            &mut keys[idx],
+            fob_core::mem::LockedSecret::new([0u8; 32]),
+        ))
     }
 
     /// Re-encrypt the current blob into its slot and write the vault file back to disk.
     pub fn save(&mut self) -> anyhow::Result<()> {
         self.blob.touch();
-        let key = self.slot_key();
+        let key = self.slot_key()?;
         self.vault_file
             .write_slot(self.slot, key.bytes(), &self.blob)?;
         atomic_write(&self.vault_path, &self.vault_file.data)?;
@@ -323,8 +331,8 @@ impl DashboardState {
         if self.blob.ssh_keys.is_empty() {
             return;
         }
-        let (socket_path, owns_socket_dir) = crate::ssh_agent::session_socket_path();
-        match crate::ssh_agent::SshAgentHandle::spawn(
+        let (socket_path, owns_socket_dir) = fob_host::ssh_agent::session_socket_path();
+        match fob_host::ssh_agent::SshAgentHandle::spawn(
             socket_path,
             owns_socket_dir,
             &self.blob.ssh_keys,
@@ -336,7 +344,7 @@ impl DashboardState {
 }
 
 impl AppState {
-    pub fn new(devices: Vec<crate::device::UsbDevice>) -> Self {
+    pub fn new(devices: Vec<fob_host::device::UsbDevice>) -> Self {
         Self {
             screen: Screen::Boot,
             devices,
@@ -372,7 +380,8 @@ mod tests {
             duress_passphrase: None,
             vault_size: 256 * 1024,
             decoy_blob: None,
-            kdf_iterations: 1000,
+            kdf_params: fob_core::vault::KdfParams::pbkdf2(1000),
+            recovery_pubkey: None,
         })
         .unwrap();
         let (slot, blob) = unlock_vault(&bytes, b"test-pass").unwrap();

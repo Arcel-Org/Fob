@@ -12,15 +12,13 @@ path = "src/main.rs"
 
 [dependencies]
 fob-core = { workspace = true }
+fob-host = { workspace = true }
 
 clap = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }
 anyhow = { workspace = true }
-serde_json = { workspace = true }
 zeroize = { workspace = true }
-directories = { workspace = true }
-arboard = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

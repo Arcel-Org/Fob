@@ -22,6 +22,7 @@ pub fn try_mlock(data: &[u8]) -> bool {
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
+        let _ = data;
         false
     }
 }
@@ -31,6 +32,11 @@ pub fn try_munlock(data: &[u8]) {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     unsafe {
         libc::munlock(data.as_ptr() as *const _, data.len());
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = data;
     }
 }
 

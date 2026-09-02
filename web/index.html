@@ -679,6 +679,13 @@ function parseHeader(fileBytes) {
   if (!fileBytes.slice(0,4).every((b,i) => b === MAGIC[i])) throw new Error('Not a Fob vault');
   const view = new DataView(fileBytes.buffer, fileBytes.byteOffset, fileBytes.byteLength);
   const formatVersion = view.getUint32(4, true);
+  if (formatVersion === 4) {
+    // v4 vaults may use Argon2id (no native WebCrypto primitive) and/or a
+    // hybrid post-quantum recovery key — both CLI-only. Must match
+    // fob-core/src/format.rs's FORMAT_VERSION bump and kdf.rs's doc comment
+    // on why PBKDF2 remains the browser vault's only supported KDF.
+    throw new Error('This vault was created by a newer version of the Fob CLI (format v4, Argon2id/recovery key) and can’t be opened in the browser yet — use the CLI to view or edit it.');
+  }
   if (formatVersion !== FORMAT_VERSION) {
     throw new Error(`Unsupported vault format version ${formatVersion} (expected ${FORMAT_VERSION})`);
   }

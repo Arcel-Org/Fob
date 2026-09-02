@@ -1,48 +1,9 @@
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
-#[derive(Debug, Clone)]
-pub struct UsbDevice {
-    pub name: String,
-    pub size_bytes: u64,
-    pub path: PathBuf,     // mount point, e.g. /Volumes/MyDrive
-    pub disk_node: String, // e.g. "disk4" — used for formatting
-    #[allow(dead_code)]
-    pub serial: Option<String>,
-    pub has_fob_vault: bool,
-}
-
-impl UsbDevice {
-    pub fn size_display(&self) -> String {
-        let gb = self.size_bytes as f64 / 1_073_741_824.0;
-        if gb >= 1.0 {
-            format!("{:.1} GB", gb)
-        } else {
-            format!("{:.1} MB", self.size_bytes as f64 / 1_048_576.0)
-        }
-    }
-
-    pub fn is_system_drive(&self) -> bool {
-        let p = self.path.to_string_lossy();
-        // Never allow the primary boot volume.
-        p == "/Volumes/Macintosh HD" || p == "/" || p == "/Volumes/Macintosh HD - Data"
-    }
-}
-
-/// Enumerate only removable, external USB drives visible to the OS.
-///
-/// On macOS this uses `diskutil info -all` to get authoritative removability data.
-/// System drives are always excluded.
-pub fn enumerate_usb_devices() -> Vec<UsbDevice> {
-    #[cfg(target_os = "macos")]
-    return enumerate_macos();
-
-    #[cfg(target_os = "linux")]
-    return enumerate_linux();
-
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    return Vec::new();
-}
+#[cfg(target_os = "macos")]
+use super::UsbDevice;
 
 // ── diskutil output parsing (pure — platform-independent, unit tested) ────
 //
@@ -52,7 +13,7 @@ pub fn enumerate_usb_devices() -> Vec<UsbDevice> {
 
 /// Parse a `diskutil info` block's "Mount Point:" line.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn parse_mount_point(info: &str) -> Option<PathBuf> {
+pub(super) fn parse_mount_point(info: &str) -> Option<PathBuf> {
     let raw = info
         .lines()
         .find(|l| l.trim_start().starts_with("Mount Point:"))?
@@ -74,7 +35,7 @@ fn parse_mount_point(info: &str) -> Option<PathBuf> {
 /// `unwrap_or_else`, and that fallback never triggers if this returns
 /// `Some` for an empty string.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn parse_volume_name(info: &str) -> Option<String> {
+pub(super) fn parse_volume_name(info: &str) -> Option<String> {
     let name = info
         .lines()
         .find(|l| l.trim_start().starts_with("Volume Name:"))?
@@ -99,7 +60,7 @@ fn parse_volume_name(info: &str) -> Option<String> {
 /// external HFS+/APFS drive the user is about to reformat) silently shows
 /// a size of 0.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn parse_disk_size_bytes(info: &str) -> u64 {
+pub(super) fn parse_disk_size_bytes(info: &str) -> u64 {
     info.lines()
         .find(|l| {
             l.contains("Disk Size:")
@@ -116,7 +77,7 @@ fn parse_disk_size_bytes(info: &str) -> u64 {
 /// Parse a `diskutil info` block's "Device Node:" line into a bare node name
 /// (`/dev/disk4s1` → `disk4s1`).
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn parse_device_node(info: &str) -> Option<String> {
+pub(super) fn parse_device_node(info: &str) -> Option<String> {
     info.lines()
         .find_map(|l| l.trim_start().strip_prefix("Device Node:"))
         .map(|rest| rest.trim().trim_start_matches("/dev/").to_string())
@@ -125,7 +86,7 @@ fn parse_device_node(info: &str) -> Option<String> {
 /// Does this `diskutil info` block (queried by mount point) describe an
 /// external disk?
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn is_external_diskutil_info(info: &str) -> bool {
+pub(super) fn is_external_diskutil_info(info: &str) -> bool {
     let protocol_says_external = info
         .lines()
         .find(|l| l.contains("Protocol:"))
@@ -157,7 +118,7 @@ fn is_external_diskutil_info(info: &str) -> bool {
 /// are still included too, since that's the one case where a whole-disk
 /// query *does* succeed: an unpartitioned "superfloppy"-formatted drive.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn parse_external_disk_nodes(list_output: &str) -> Vec<String> {
+pub(super) fn parse_external_disk_nodes(list_output: &str) -> Vec<String> {
     let mut nodes: Vec<String> = Vec::new();
     let mut push_unique = |node: String| {
         if !nodes.contains(&node) {
@@ -202,7 +163,7 @@ fn parse_external_disk_nodes(list_output: &str) -> Vec<String> {
 /// `diskutil info` query actually succeeds) — `"disk4"` (no partition)
 /// would incorrectly become `"disk"`, an invalid device id.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn whole_disk_identifier(disk_node: &str) -> String {
+pub(super) fn whole_disk_identifier(disk_node: &str) -> String {
     if let Some(s_pos) = disk_node.rfind('s') {
         let (before, after) = disk_node.split_at(s_pos);
         let partition_suffix = &after[1..]; // skip the 's' itself
@@ -216,10 +177,8 @@ fn whole_disk_identifier(disk_node: &str) -> String {
     disk_node.to_string()
 }
 
-// ── macOS ─────────────────────────────────────────────────────────────────
-
 #[cfg(target_os = "macos")]
-fn enumerate_macos() -> Vec<UsbDevice> {
+pub(super) fn enumerate() -> Vec<UsbDevice> {
     // `diskutil list -plist external` returns only external drives.
     // We parse /Volumes for mounted volumes on those disks.
     let mut devices = Vec::new();
@@ -230,7 +189,7 @@ fn enumerate_macos() -> Vec<UsbDevice> {
     };
 
     for disk in parse_external_disk_nodes(&out) {
-        if let Some(dev) = probe_disk_macos(&disk) {
+        if let Some(dev) = probe_disk(&disk) {
             if !dev.is_system_drive() {
                 devices.push(dev);
             }
@@ -253,7 +212,7 @@ fn enumerate_macos() -> Vec<UsbDevice> {
             }
 
             // Probe via diskutil info
-            if let Some(dev) = probe_mount_macos(&mount) {
+            if let Some(dev) = probe_mount(&mount) {
                 if !dev.is_system_drive() {
                     devices.push(dev);
                 }
@@ -266,7 +225,7 @@ fn enumerate_macos() -> Vec<UsbDevice> {
 }
 
 #[cfg(target_os = "macos")]
-fn probe_disk_macos(disk_node: &str) -> Option<UsbDevice> {
+pub(super) fn probe_disk(disk_node: &str) -> Option<UsbDevice> {
     let info_out = Command::new("diskutil")
         .args(["info", disk_node])
         .output()
@@ -294,7 +253,7 @@ fn probe_disk_macos(disk_node: &str) -> Option<UsbDevice> {
 }
 
 #[cfg(target_os = "macos")]
-fn probe_mount_macos(mount: &std::path::Path) -> Option<UsbDevice> {
+fn probe_mount(mount: &std::path::Path) -> Option<UsbDevice> {
     let info_out = Command::new("diskutil")
         .args(["info", &mount.to_string_lossy()])
         .output()
@@ -326,210 +285,26 @@ fn probe_mount_macos(mount: &std::path::Path) -> Option<UsbDevice> {
     })
 }
 
-// ── Linux ─────────────────────────────────────────────────────────────────
-
-/// Is this `/sys/block` entry name likely the system's primary disk? Purely
-/// a heuristic (`sda` with no partition suffix) — real safety comes from
-/// `UsbDevice::is_system_drive`'s mount-point check.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn is_likely_system_disk_linux(name: &str) -> bool {
-    name.starts_with("sda") && name.len() == 3
-}
-
-/// Decode the octal escapes (`\040` space, `\011` tab, `\012` newline,
-/// `\134` backslash) the kernel uses for special characters in
-/// `/proc/mounts` fields. Without this, any USB drive whose volume label
-/// contains a space — extremely common (Windows-default names, "FOB
-/// BACKUP", "My Passport") — resolves to a mount path containing a literal
-/// `\040` instead of a space, which doesn't exist on disk, so `vault.fob`
-/// detection and every subsequent file operation silently fail.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn decode_mounts_escapes(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'\\'
-            && i + 3 < bytes.len()
-            && bytes[i + 1..i + 4].iter().all(u8::is_ascii_digit)
-        {
-            let octal = std::str::from_utf8(&bytes[i + 1..i + 4]).unwrap();
-            if let Ok(byte) = u8::from_str_radix(octal, 8) {
-                out.push(byte);
-                i += 4;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
+/// Format the given USB device as ExFAT with the label "FOB" via `diskutil
+/// eraseDisk`, requesting admin privileges through the standard macOS
+/// dialog. This is destructive — all data is erased. Caller
+/// (`format_device`) already checked `!dev.is_system_drive()`.
+#[cfg(target_os = "macos")]
+pub(super) fn erase(dev: &UsbDevice) -> anyhow::Result<()> {
+    let whole_disk = whole_disk_identifier(&dev.disk_node);
+    let cmd = format!("diskutil eraseDisk ExFAT FOB {}", whole_disk);
+    // Use osascript to request admin privileges via the standard macOS dialog.
+    let out = Command::new("osascript")
+        .args([
+            "-e",
+            &format!("do shell script \"{}\" with administrator privileges", cmd),
+        ])
+        .output()?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        anyhow::bail!("Format failed: {}", stderr.trim());
     }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-/// Find the mount point for a block device named `device_name` (a whole
-/// disk like `sdb`, or a specific partition like `sdb1`) by scanning
-/// `/proc/mounts`-formatted content.
-///
-/// Matches the device itself or any of its partitions (`sdb` matches
-/// `/dev/sdb1`, `/dev/sdb2`, ...) via a boundary-anchored prefix check, not
-/// a bare substring — a raw `.contains()` could also match an unrelated
-/// device whose name happens to contain the same characters. If a disk has
-/// multiple mounted partitions, prefers whichever one already has a
-/// `vault.fob` (there's no other principled way to pick among them), else
-/// falls back to the first one found.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn find_mount_point(mounts_content: &str, device_name: &str) -> Option<PathBuf> {
-    let candidates: Vec<PathBuf> = mounts_content
-        .lines()
-        .filter_map(|line| {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() < 2 {
-                return None;
-            }
-            let dev = parts[0].strip_prefix("/dev/").unwrap_or(parts[0]);
-            let is_this_disk = dev == device_name
-                || (dev.len() > device_name.len()
-                    && dev.starts_with(device_name)
-                    && dev[device_name.len()..].bytes().all(|b| b.is_ascii_digit()));
-            is_this_disk.then(|| PathBuf::from(decode_mounts_escapes(parts[1])))
-        })
-        .collect();
-
-    candidates
-        .iter()
-        .find(|p| p.join("vault.fob").exists())
-        .cloned()
-        .or_else(|| candidates.into_iter().next())
-}
-
-/// Does this resolved/symlink-target `/sys/block/<name>` device path
-/// indicate the device is attached via USB (a path component that's
-/// exactly `usb` followed by a bus number, e.g. `.../usb1/1-1/...`),
-/// regardless of what the device's own `removable` sysfs flag says?
-///
-/// Many USB-to-SATA and USB-to-NVMe bridge chips report `removable=0`
-/// (reflecting the bridge's own SCSI RMB bit, not whether the whole
-/// enclosure is actually hot-pluggable) — relying on `removable` alone
-/// silently hides external SSDs/NVMe enclosures from `fob devices` while
-/// plain flash drives (which do report `removable=1`) work fine.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn resolved_path_indicates_usb(resolved_path: &str) -> bool {
-    resolved_path.split('/').any(|component| {
-        component
-            .strip_prefix("usb")
-            .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
-    })
-}
-
-#[cfg(target_os = "linux")]
-fn enumerate_linux() -> Vec<UsbDevice> {
-    let mut devices = Vec::new();
-    let Ok(entries) = std::fs::read_dir("/sys/block") else {
-        return devices;
-    };
-
-    let Ok(mounts) = std::fs::read_to_string("/proc/mounts") else {
-        return devices;
-    };
-
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let removable = std::fs::read_to_string(entry.path().join("removable"))
-            .map(|s| s.trim() == "1")
-            .unwrap_or(false);
-        // `removable` alone misses USB-SATA/USB-NVMe bridges that report
-        // removable=0 — also accept devices whose sysfs symlink resolves
-        // through a USB bus, so those enclosures aren't silently invisible.
-        let is_usb = std::fs::read_link(entry.path())
-            .map(|p| resolved_path_indicates_usb(&p.to_string_lossy()))
-            .unwrap_or(false);
-        if (!removable && !is_usb) || is_likely_system_disk_linux(&name) {
-            continue;
-        }
-
-        let size_bytes = std::fs::read_to_string(entry.path().join("size"))
-            .ok()
-            .and_then(|s| s.trim().parse::<u64>().ok())
-            .map(|s| s * 512)
-            .unwrap_or(0);
-
-        let Some(mount) = find_mount_point(&mounts, &name) else {
-            continue;
-        };
-        let has_fob_vault = mount.join("vault.fob").exists();
-        devices.push(UsbDevice {
-            name: name.clone(),
-            size_bytes,
-            path: mount,
-            disk_node: name,
-            serial: None,
-            has_fob_vault,
-        });
-    }
-
-    devices.sort_by(|a, b| a.name.cmp(&b.name));
-    devices
-}
-
-// ── Format (wipe) ─────────────────────────────────────────────────────────
-
-/// Format the given USB device as ExFAT with the label "FOB".
-/// This is destructive — all data is erased.
-///
-/// On macOS uses `diskutil eraseDisk`.
-/// On Linux uses `mkfs.exfat`.
-pub fn format_device(dev: &UsbDevice) -> anyhow::Result<()> {
-    if dev.is_system_drive() {
-        anyhow::bail!("Refusing to format system drive.");
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        let whole_disk = whole_disk_identifier(&dev.disk_node);
-        let cmd = format!("diskutil eraseDisk ExFAT FOB {}", whole_disk);
-        // Use osascript to request admin privileges via the standard macOS dialog.
-        let out = Command::new("osascript")
-            .args([
-                "-e",
-                &format!("do shell script \"{}\" with administrator privileges", cmd),
-            ])
-            .output()?;
-        if !out.status.success() {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            anyhow::bail!("Format failed: {}", stderr.trim());
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        // Unmount first
-        let _ = Command::new("umount").arg(&dev.disk_node).status();
-        let status = Command::new("mkfs.exfat")
-            .args(["-n", "FOB", &format!("/dev/{}", dev.disk_node)])
-            .status()?;
-        if !status.success() {
-            anyhow::bail!("mkfs.exfat failed. Install exfat-utils.");
-        }
-    }
-
     Ok(())
-}
-
-/// Find the new mount point after formatting (diskutil remounts automatically).
-#[allow(dead_code)]
-pub fn find_mount_after_format(_old_disk_node: &str) -> Option<PathBuf> {
-    // Give the OS a moment to remount.
-    std::thread::sleep(std::time::Duration::from_secs(2));
-    let mount = PathBuf::from("/Volumes/FOB");
-    if mount.exists() {
-        return Some(mount);
-    }
-    // Fallback: try probing
-    #[cfg(target_os = "macos")]
-    if let Some(dev) = probe_disk_macos(_old_disk_node) {
-        return Some(dev.path);
-    }
-    None
 }
 
 #[cfg(test)]
@@ -744,164 +519,5 @@ mod tests {
         // mangled "disk4" into the invalid "disk".
         assert_eq!(whole_disk_identifier("disk4"), "disk4");
         assert_eq!(whole_disk_identifier("disk10"), "disk10");
-    }
-
-    const PROC_MOUNTS_SAMPLE: &str = "\
-/dev/sda1 / ext4 rw,relatime 0 0
-/dev/sdb1 /media/user/FOB exfat rw,nosuid,nodev,relatime 0 0
-tmpfs /tmp tmpfs rw 0 0
-";
-
-    #[test]
-    fn finds_mount_point_for_matching_device() {
-        assert_eq!(
-            find_mount_point(PROC_MOUNTS_SAMPLE, "sdb1"),
-            Some(PathBuf::from("/media/user/FOB"))
-        );
-    }
-
-    #[test]
-    fn finds_no_mount_point_for_unknown_device() {
-        assert_eq!(find_mount_point(PROC_MOUNTS_SAMPLE, "sdz1"), None);
-    }
-
-    #[test]
-    fn ignores_malformed_mounts_lines() {
-        assert_eq!(find_mount_point("garbage-line-no-spaces", "sdb1"), None);
-    }
-
-    #[test]
-    fn finds_mount_point_via_whole_disk_name_matching_a_partition() {
-        // enumerate_linux() passes the whole-disk /sys/block name ("sdb"),
-        // not a specific partition — must match /dev/sdb1 via that name.
-        assert_eq!(
-            find_mount_point(PROC_MOUNTS_SAMPLE, "sdb"),
-            Some(PathBuf::from("/media/user/FOB"))
-        );
-    }
-
-    #[test]
-    fn whole_disk_name_does_not_substring_match_an_unrelated_device() {
-        // "sdb" must not match "/dev/sdbx1" (a different, unrelated device
-        // that merely starts with the same characters) via a bare
-        // substring/prefix check with no boundary.
-        let mounts = "/dev/sdbx1 /mnt/other ext4 rw 0 0\n";
-        assert_eq!(find_mount_point(mounts, "sdb"), None);
-    }
-
-    #[test]
-    fn decodes_octal_escaped_spaces_in_mount_path() {
-        // Real /proc/mounts octal-escapes spaces in the mount path as
-        // \040 — a volume literally named "FOB BACKUP" (or any
-        // Windows-default label with a space) must still resolve to a
-        // real, existing-on-disk path, not a literal "\040".
-        let mounts = "/dev/sdb1 /media/user/FOB\\040BACKUP exfat rw 0 0\n";
-        assert_eq!(
-            find_mount_point(mounts, "sdb1"),
-            Some(PathBuf::from("/media/user/FOB BACKUP"))
-        );
-    }
-
-    #[test]
-    fn decode_mounts_escapes_handles_all_four_kernel_escapes() {
-        assert_eq!(decode_mounts_escapes("a\\040b"), "a b");
-        assert_eq!(decode_mounts_escapes("a\\011b"), "a\tb");
-        assert_eq!(decode_mounts_escapes("a\\012b"), "a\nb");
-        assert_eq!(decode_mounts_escapes("a\\134b"), "a\\b");
-        assert_eq!(decode_mounts_escapes("no escapes here"), "no escapes here");
-    }
-
-    #[test]
-    fn prefers_the_partition_that_already_has_a_vault_when_disk_has_several() {
-        // A disk with multiple mounted partitions (sdb1, sdb2) must not
-        // just silently return whichever happens to appear first in
-        // /proc/mounts with no regard for which one is actually the vault.
-        let dir = std::env::temp_dir().join(format!(
-            "fob-device-test-{}-{}",
-            std::process::id(),
-            "prefers_vault_partition"
-        ));
-        let empty = dir.join("empty_partition");
-        let has_vault = dir.join("vault_partition");
-        std::fs::create_dir_all(&empty).unwrap();
-        std::fs::create_dir_all(&has_vault).unwrap();
-        std::fs::write(
-            has_vault.join("vault.fob"),
-            b"not a real vault, just a marker",
-        )
-        .unwrap();
-
-        let mounts = format!(
-            "/dev/sdb1 {} ext4 rw 0 0\n/dev/sdb2 {} exfat rw 0 0\n",
-            empty.display(),
-            has_vault.display()
-        );
-
-        assert_eq!(find_mount_point(&mounts, "sdb"), Some(has_vault.clone()));
-
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn detects_usb_bus_component_in_resolved_sysfs_path() {
-        // A real /sys/block/sdb symlink target for a USB-attached device.
-        let usb_path =
-            "../devices/pci0000:00/0000:00:14.0/usb1/1-1/1-1:1.0/host0/target0:0:0/0:0:0:0/block/sdb";
-        assert!(resolved_path_indicates_usb(usb_path));
-    }
-
-    #[test]
-    fn does_not_flag_internal_sata_path_as_usb() {
-        let sata_path =
-            "../devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0/block/sda";
-        assert!(!resolved_path_indicates_usb(sata_path));
-    }
-
-    #[test]
-    fn does_not_falsely_match_a_component_that_merely_starts_with_usb() {
-        // "usbfoo" is not "usb" + a bus number — must not match.
-        assert!(!resolved_path_indicates_usb("../devices/usbfoo/block/sdb"));
-    }
-
-    #[test]
-    fn system_disk_heuristic_matches_bare_sda_only() {
-        assert!(is_likely_system_disk_linux("sda"));
-        assert!(!is_likely_system_disk_linux("sda1")); // a partition, not the whole disk
-        assert!(!is_likely_system_disk_linux("sdb"));
-    }
-
-    #[test]
-    fn size_display_formats_gb_and_mb() {
-        let gb_dev = UsbDevice {
-            name: "x".into(),
-            size_bytes: 16 * 1_073_741_824,
-            path: PathBuf::new(),
-            disk_node: "disk4".into(),
-            serial: None,
-            has_fob_vault: false,
-        };
-        assert_eq!(gb_dev.size_display(), "16.0 GB");
-
-        let mb_dev = UsbDevice {
-            size_bytes: 512 * 1_048_576,
-            ..gb_dev
-        };
-        assert_eq!(mb_dev.size_display(), "512.0 MB");
-    }
-
-    #[test]
-    fn is_system_drive_matches_known_boot_volumes() {
-        let make = |path: &str| UsbDevice {
-            name: "x".into(),
-            size_bytes: 0,
-            path: PathBuf::from(path),
-            disk_node: "disk1".into(),
-            serial: None,
-            has_fob_vault: false,
-        };
-        assert!(make("/").is_system_drive());
-        assert!(make("/Volumes/Macintosh HD").is_system_drive());
-        assert!(make("/Volumes/Macintosh HD - Data").is_system_drive());
-        assert!(!make("/Volumes/FOB").is_system_drive());
     }
 }
