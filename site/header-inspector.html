@@ -56,6 +56,7 @@
   <div id="err" style="display:none;background:rgba(239,68,68,.1);border:1px solid var(--danger);color:var(--danger);border-radius:10px;padding:16px 18px;margin-top:16px"></div>
 </div>
 
+
 <script>
 let wasm_bindgen = (function(exports) {
     let script_src;
@@ -832,6 +833,7 @@ let wasm_bindgen = (function(exports) {
 
 </script>
 
+
 <script>
 'use strict';
 const drop = document.getElementById('drop');
@@ -858,7 +860,13 @@ function inspect(file){
     const bytes = new Uint8Array(buf);
     let h;
     try { h = FobWasm.parse_header(bytes); }
-    catch(e){ show(false, 'Not a valid Fob vault: ' + e.message); return; }
+    catch(e){
+      // wasm-bindgen throws the Rust error as a string (not an Error), so
+      // e.message is undefined for it — read the value itself.
+      const msg = (e && e.message) ? e.message : String(e || 'unknown error');
+      show(false, 'Not a valid Fob vault: ' + msg);
+      return;
+    }
 
     const isV4 = h.formatVersion === 4;
     setText('r-version', isV4
@@ -880,3 +888,4 @@ function inspect(file){
 </script>
 </body>
 </html>
+

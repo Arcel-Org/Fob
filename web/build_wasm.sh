@@ -35,9 +35,9 @@ echo ">> generating classic-script glue with wasm-bindgen"
   --out-dir "$OUT" --target no-modules
 
 echo ">> inlining wasm as base64 + bootstrap into web/fob-wasm.js"
-python3 - "$OUT/fob_wasm.js" "$OUT/fob_wasm_bg.wasm" "$ROOT/web/fob-wasm.js" "$ROOT/web/index.template.html" "$ROOT/web/index.html" "$ROOT/site/header-inspector.html" <<'PY'
+python3 - "$OUT/fob_wasm.js" "$OUT/fob_wasm_bg.wasm" "$ROOT/web/fob-wasm.js" "$ROOT/web/index.template.html" "$ROOT/web/index.html" "$ROOT/site/header-inspector.template.html" "$ROOT/site/header-inspector.html" <<'PY'
 import base64, sys
-glue, wasm, bundle_out, template_out, index_out, inspector_out = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]
+glue, wasm, bundle_out, template_out, index_out, inspector_tmpl, inspector_out = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7]
 with open(glue) as f:
     glue_js = f.read()
 with open(wasm, 'rb') as f:
@@ -68,9 +68,9 @@ with open(bundle_out, 'w') as f:
     f.write(bootstrap)
 
 # Inline the bundle into the self-contained pages at the marker so they need
-# no external fetch. index.html is generated from index.template.html (its
-# hand-edited source); header-inspector.html is itself the source (its marker
-# is edited in place and replaced on each build).
+# no external fetch. Both pages are generated from their .template.html
+# sources (the hand-edited files with the marker); the built .html files are
+# the self-contained deliverables shipped to the USB / GitHub Pages.
 marker = "<!--FOBWASM_INLINE_MARKER-->"
 inline = "<script>\n" + glue_js + "\n" + bootstrap + "\n</script>"
 
@@ -83,16 +83,17 @@ html = html.replace(marker, inline)
 with open(index_out, 'w') as f:
     f.write(html)
 
-# 2) header-inspector.html ← itself (source has the marker)
-with open(inspector_out) as f:
+# 2) header-inspector.html ← header-inspector.template.html
+with open(inspector_tmpl) as f:
     html = f.read()
 if marker not in html:
-    raise SystemExit(f"marker {marker!r} not found in {inspector_out}")
+    raise SystemExit(f"marker {marker!r} not found in {inspector_tmpl}")
 html = html.replace(marker, inline)
 with open(inspector_out, 'w') as f:
     f.write(html)
 print(f"wrote {bundle_out}")
 print(f"inlined into {index_out}")
+print(f"inlined into {inspector_out}")
 PY
 
 echo ">> done. bundle: $(wc -c < web/fob-wasm.js) bytes, index.html: $(wc -c < web/index.html) bytes"

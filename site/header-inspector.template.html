@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'wasm-unsafe-eval'; img-src data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
+<title>Fob — Header Inspector</title>
+<style>
+  :root{
+    --bg:#07090f; --surface:#0c1220; --surface2:#111827; --border:#1e2d47;
+    --blue:#3b82f6; --text:#e2e9f6; --text-2:#617698; --ok:#22c55e;
+    --warn:#f59e0b; --danger:#ef4444; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:48px 24px 80px}
+  a{color:var(--blue);text-decoration:none}
+  h1{font-size:24px;margin-bottom:6px}
+  .muted{color:var(--text-2)}
+  #drop{background:var(--surface);border:2px dashed var(--border);border-radius:12px;padding:48px 20px;text-align:center;color:var(--text-2);margin:28px 0;transition:border-color .2s;cursor:pointer}
+  #drop.over{border-color:var(--blue);color:var(--text)}
+  #file{display:none}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:16px}
+  td{padding:12px 16px;border-top:1px solid var(--border);font-size:14px}
+  td:first-child{color:var(--text-2);width:42%;white-space:nowrap}
+  td:last-child{font-family:var(--mono);font-size:13px}
+  .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .v4{background:rgba(34,197,94,.12);color:var(--ok)}
+  .ok{color:var(--ok)}
+  .warn{color:var(--warn)}
+  .bad{color:var(--danger)}
+  .note{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-top:16px;color:var(--text-2);font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p><a href="index.html">← Back</a></p>
+  <h1>Header inspector</h1>
+  <p class="muted">Reads only the <b>public</b> header of a Fob vault — format version, KDF and its parameters, recovery-key status, and fingerprint. No passphrase is asked for and nothing is ever decrypted. All parsing runs locally in your browser.</p>
+
+  <div id="drop">Drop a <b>vault.fob</b> file here, or click to choose</div>
+  <input type="file" id="file" accept=".fob,application/octet-stream">
+
+  <div id="result" style="display:none">
+    <table>
+      <tr><td>Format version</td><td><span id="r-version"></span></td></tr>
+      <tr><td>KDF algorithm</td><td><span id="r-kdf"></span></td></tr>
+      <tr><td>Argon2id memory</td><td><span id="r-mem"></span></td></tr>
+      <tr><td>Argon2id time cost</td><td><span id="r-time"></span></td></tr>
+      <tr><td>Argon2id parallelism</td><td><span id="r-par"></span></td></tr>
+      <tr><td>Recovery key</td><td><span id="r-recov"></span></td></tr>
+      <tr><td>Fingerprint</td><td><span id="r-fp"></span></td></tr>
+    </table>
+    <div class="note">This is <b>public metadata</b> — anyone who has the file can read it. The vault contents (passwords, codes, keys) are encrypted and cannot be read without your passphrase, which is never handled here.</div>
+  </div>
+  <div id="err" style="display:none;background:rgba(239,68,68,.1);border:1px solid var(--danger);color:var(--danger);border-radius:10px;padding:16px 18px;margin-top:16px"></div>
+</div>
+
+
+<!--FOBWASM_INLINE_MARKER-->
+
+
+<script>
+'use strict';
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.classList.remove('over');
+  if (e.dataTransfer.files[0]) inspect(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) inspect(fileInput.files[0]); });
+
+function setText(id, v){ document.getElementById(id).textContent = v; }
+function show(ok, msg){
+  const err = document.getElementById('err');
+  if (ok){ err.style.display='none'; document.getElementById('result').style.display=''; }
+  else { document.getElementById('result').style.display='none'; err.style.display=''; err.textContent = msg; }
+}
+
+function inspect(file){
+  file.arrayBuffer().then(buf => {
+    const bytes = new Uint8Array(buf);
+    let h;
+    try { h = FobWasm.parse_header(bytes); }
+    catch(e){
+      // wasm-bindgen throws the Rust error as a string (not an Error), so
+      // e.message is undefined for it — read the value itself.
+      const msg = (e && e.message) ? e.message : String(e || 'unknown error');
+      show(false, 'Not a valid Fob vault: ' + msg);
+      return;
+    }
+
+    const isV4 = h.formatVersion === 4;
+    setText('r-version', isV4
+      ? `<span class="pill v4">v${h.formatVersion} · Argon2id</span>`
+      : `v${h.formatVersion}`);
+    setText('r-kdf', h.kdfAlgorithm);
+    const memKib = h.argon2MemoryKib;
+    const memMb = (memKib / 1024).toFixed(0);
+    setText('r-mem', `${memKib.toLocaleString()} KiB (${memMb} MiB)`);
+    setText('r-time', String(h.kdfTimeCost));
+    setText('r-par', String(h.argon2Parallelism));
+    setText('r-recov', h.recoveryEnabled
+      ? '<span class="ok">Enabled — recovery key was generated</span>'
+      : '<span class="muted">Disabled</span>');
+    setText('r-fp', h.fingerprint || '—');
+    show(true);
+  }).catch(() => show(false, 'Could not read that file.'));
+}
+</script>
+</body>
+</html>
+
