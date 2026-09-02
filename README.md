@@ -22,27 +22,6 @@ An encrypted vault that lives on a USB drive — passwords, TOTP codes, SSH keys
 
 Fob turns any USB stick into a cryptographic security key. Plug it in, open `index.html`, and unlock with a passphrase — your credentials are available as a password manager, TOTP generator, and SSH key store. Unplug and everything locks. The browser vault runs the exact same Rust crypto as the CLI (compiled to WASM and embedded in the single HTML file), so a vault created on the command line opens in the browser and vice versa.
 
-<div align="center">
-
-![The Fob browser vault, locked](docs/screenshots/vault-lock.png)
-
-*The vault lives on the USB drive — open `index.html`, enter your passphrase.*
-
-</div>
-
----
-
-## Screenshots
-
-<div align="center">
-
-| | |
-|---|---|
-| ![Unlocked vault](docs/screenshots/vault-main.png) | ![Landing page](docs/screenshots/site-landing.png) |
-| *The unlocked vault — passwords, TOTP codes, SSH keys, notes* | *The Fob landing page (arcel-org.github.io/Fob)* |
-
-</div>
-
 ---
 
 ## What's in the vault
@@ -194,7 +173,7 @@ fob/
 │   ├── index.html          # generated self-contained browser vault (shipped to USB)
 │   ├── build_wasm.sh       # compile fob-wasm → inline into index.html / inspector
 │   └── tests/              # headless-chromium interaction checks for index.html
-└── docs/screenshots/   # README screenshots (captured from the real UI)
+└── docs/               # testing guides and (optionally) README screenshots
 ```
 
 The `fob` command is intentionally small: it only installs/updates and does

@@ -13,3 +13,6 @@ web/wasm-nomod/
 web/wasm-tmp/
 # Local simulated USB volume for hardware-less end-to-end testing
 .usb-sim/
+
+# Local screenshot capture scratch (previews + capture script)
+.shot-preview/
