@@ -168,8 +168,8 @@ fn cmd_recover(device: Option<PathBuf>) -> Result<()> {
     let mut new_passphrase = String::new();
     std::io::stdin().read_line(&mut new_passphrase)?;
     let new_passphrase = new_passphrase.trim_end_matches(['\r', '\n']).to_string();
-    if new_passphrase.is_empty() {
-        anyhow::bail!("passphrase cannot be empty");
+    if let Some(reason) = fob_core::passphrase::rejection_reason(&new_passphrase) {
+        anyhow::bail!("passphrase {reason}");
     }
 
     let mut vault_file = fob_core::vault::VaultFile::from_bytes(vault_bytes)?;

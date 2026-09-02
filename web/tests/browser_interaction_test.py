@@ -484,12 +484,36 @@ async def check_v4_roundtrip(chrome):
         await cdp.close()
 
 
+async def check_passphrase_policy_enforced(chrome):
+    """The create-vault card must refuse weak passphrases using the same
+    shared Rust policy the CLI uses (length >= 14, entropy floor, blocklist,
+    diversity) — surfaced through FobWasm.passphrase_rejection_reason."""
+    cdp = await chrome.open_page()
+    try:
+        # A blocklisted / too-short passphrase must be refused before any
+        # vault bytes are produced.
+        await set_value(cdp, "create-pass", "password123")
+        await set_value(cdp, "create-pass2", "password123")
+        await click(cdp, '[data-action="create-vault"]')
+        await asyncio.sleep(0.4)
+        err = await cdp.eval("document.getElementById('create-err').textContent")
+        if not err:
+            return False, "weak passphrase should have been rejected, but create succeeded"
+
+        # A strong passphrase still creates a vault.
+        await create_vault(cdp)
+        return True, f"weak passphrase rejected ('{err}'), strong passphrase accepted"
+    finally:
+        await cdp.close()
+
+
 CHECKS = [
     ("search filtering", check_search_filtering),
     ("TOTP countdown display", check_totp_countdown),
     ("entry list rendering/scrolling with many entries", check_many_entries_rendering),
     ("auto-lock after inactivity timeout", check_autolock_timeout),
     ("v4 Argon2id vault round-trips in-browser", check_v4_roundtrip),
+    ("passphrase policy enforced on create", check_passphrase_policy_enforced),
 ]
 
 

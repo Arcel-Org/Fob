@@ -996,11 +996,22 @@ async function doCreateVault() {
   const decoyPass  = decoyEl.value  || null;
   const duressPass = duressEl.value || null;
   if (!p1.value) { errEl.textContent = 'Enter a passphrase.'; p1.focus(); return; }
-  if (p1.value.length < 8) { errEl.textContent = 'Passphrase must be at least 8 characters.'; p1.focus(); return; }
+  // Shared passphrase policy (Rust, in the embedded WASM): length >= 14,
+  // entropy floor, blocklist, diversity. Same bar the CLI enforces.
+  const mainReason = FobWasm.passphrase_rejection_reason(p1.value);
+  if (mainReason) { errEl.textContent = `Passphrase ${mainReason}.`; p1.focus(); return; }
   if (p1.value !== p2.value) { errEl.textContent = 'Passphrases do not match.'; p2.focus(); return; }
   if (decoyPass && decoyPass === p1.value) { errEl.textContent = 'Decoy passphrase must differ from your main passphrase.'; decoyEl.focus(); return; }
   if (duressPass && duressPass === p1.value) { errEl.textContent = 'Duress passphrase must differ from your main passphrase.'; duressEl.focus(); return; }
   if (decoyPass && duressPass && decoyPass === duressPass) { errEl.textContent = 'Decoy and duress passphrases must differ.'; duressEl.focus(); return; }
+  if (decoyPass) {
+    const dReason = FobWasm.passphrase_rejection_reason(decoyPass);
+    if (dReason) { errEl.textContent = `Decoy passphrase ${dReason}.`; decoyEl.focus(); return; }
+  }
+  if (duressPass) {
+    const dReason = FobWasm.passphrase_rejection_reason(duressPass);
+    if (dReason) { errEl.textContent = `Duress passphrase ${dReason}.`; duressEl.focus(); return; }
+  }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating…';
   try {
     vaultFileData   = await createVaultBytes(p1.value, decoyPass, duressPass);

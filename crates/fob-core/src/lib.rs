@@ -4,6 +4,7 @@ pub mod format;
 pub mod generator;
 pub mod kdf;
 pub mod mem;
+pub mod passphrase;
 pub mod recovery;
 pub mod sshkey;
 pub mod totp;

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { initSync, init_panic_hook, create_vault, parse_header, unlock_vault, save_vault, totp_code, passphrase_acceptable, passphrase_strength } from '/root/Git/github/Fob/web/wasm-out/fob_wasm.js';
+import { initSync, init_panic_hook, create_vault, parse_header, unlock_vault, save_vault, totp_code, passphrase_acceptable, passphrase_rejection_reason, passphrase_strength } from '/root/Git/github/Fob/web/wasm-out/fob_wasm.js';
 const m = new WebAssembly.Module(readFileSync('/root/Git/github/Fob/web/wasm-out/fob_wasm_bg.wasm'));
 initSync({ module: m });
 init_panic_hook();
@@ -7,6 +7,9 @@ const origErr = console.error;
 console.error = (...a) => origErr('CONSOLE:', ...a);
 
 console.log('weak acceptable?', passphrase_acceptable('password123'), '| strong?', passphrase_acceptable('correct-horse-battery-staple'));
+console.log('weak reason:', passphrase_rejection_reason('password123'));
+console.log('strong reason (empty):', JSON.stringify(passphrase_rejection_reason('correct-horse-battery-staple')));
+console.log('strength weak/strong:', passphrase_strength('password123').toFixed(2), passphrase_strength('correct-horse-battery-staple').toFixed(2));
 try {
   const v = create_vault('correct-horse-battery-staple', null, null, false);
   console.log('created len', v.length);

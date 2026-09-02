@@ -152,9 +152,19 @@ impl App {
                     } else if !self.state.wizard.main_pass.is_empty()
                         && self.state.wizard.main_pass == self.state.wizard.main_pass_confirm
                     {
-                        self.state.screen = Screen::SetupWizard(WizardStep::Confirm);
-                        self.state.wizard.field = 0;
-                        self.state.wizard.cursor = 0;
+                        // Enforce the same passphrase policy the browser and
+                        // fob-core share (length, entropy, blocklist,
+                        // diversity). A rejected passphrase must not reach
+                        // vault creation.
+                        if let Some(reason) = fob_core::passphrase::rejection_reason(
+                            self.state.wizard.main_pass.as_str(),
+                        ) {
+                            self.state.wizard.policy_flash = Some(reason.to_string());
+                        } else {
+                            self.state.screen = Screen::SetupWizard(WizardStep::Confirm);
+                            self.state.wizard.field = 0;
+                            self.state.wizard.cursor = 0;
+                        }
                     } else {
                         self.state.wizard.mismatch_flash = 15;
                     }

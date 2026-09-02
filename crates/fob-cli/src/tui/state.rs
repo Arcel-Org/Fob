@@ -42,6 +42,10 @@ pub struct WizardState {
     pub field: usize,
     pub cursor: usize,
     pub mismatch_flash: u8,
+    /// When the master passphrase is confirmed, a policy rejection message
+    /// (e.g. "too short — use at least 14 characters") shown on the Master
+    /// step until the passphrase is edited. `None` means the policy passed.
+    pub policy_flash: Option<String>,
     /// Opt-in: generate a hybrid X25519+ML-KEM-1024 post-quantum recovery
     /// key alongside the vault (toggled at the Confirm step).
     pub recovery_enabled: bool,

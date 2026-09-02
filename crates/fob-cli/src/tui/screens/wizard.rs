@@ -1,6 +1,6 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::Style,
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
@@ -261,6 +261,20 @@ fn render_step_master(frame: &mut Frame, state: &AppState, area: Rect) {
         let inner_width = chunks[2].width.saturating_sub(2);
         let x_off = (state.wizard.cursor as u16).min(inner_width.saturating_sub(1));
         frame.set_cursor_position((chunks[2].x + 1 + x_off, chunks[2].y + 1));
+    }
+
+    // Passphrase-policy rejection (shared with fob-core / the browser).
+    if let Some(reason) = state.wizard.policy_flash.as_deref() {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("✗ ", Style::default().fg(RED)),
+                Span::styled(
+                    format!("Passphrase {reason}"),
+                    Style::default().fg(RED).add_modifier(Modifier::BOLD),
+                ),
+            ])),
+            chunks[3],
+        );
     }
 
     frame.render_widget(

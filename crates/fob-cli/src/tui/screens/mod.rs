@@ -276,6 +276,30 @@ mod tests {
     }
 
     #[test]
+    fn wizard_master_step_policy_flash_shows_the_reason() {
+        let mut state = AppState::new(Vec::new());
+        state.screen = Screen::SetupWizard(WizardStep::Master);
+        state.wizard.policy_flash = Some("too short — use at least 14 characters".to_string());
+        let text = rendered_text(&state);
+        assert!(
+            text.contains("too short"),
+            "expected the policy rejection reason to render:\n{text}"
+        );
+    }
+
+    #[test]
+    fn wizard_master_step_policy_flash_absent_renders_no_error() {
+        let mut state = AppState::new(Vec::new());
+        state.screen = Screen::SetupWizard(WizardStep::Master);
+        state.wizard.policy_flash = None;
+        let text = rendered_text(&state);
+        assert!(
+            !text.contains("✗"),
+            "no policy error should render when policy passed:\n{text}"
+        );
+    }
+
+    #[test]
     fn wizard_confirm_step_flags_a_short_passphrase_as_weak() {
         let mut state = AppState::new(vec![test_device("Drive")]);
         state.screen = Screen::SetupWizard(WizardStep::Confirm);

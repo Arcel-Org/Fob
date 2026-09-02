@@ -240,13 +240,22 @@ fn set_recover_new_bytes(v: Vec<u8>) {
 /// entropy model. Shared so browser and CLI use the same bar.
 #[wasm_bindgen]
 pub fn passphrase_strength(passphrase: &str) -> f64 {
-    crate::passphrase::estimate(passphrase)
+    fob_core::passphrase::estimate(passphrase)
 }
 
 /// Check whether a passphrase clears the minimum bar for new vaults.
 #[wasm_bindgen]
 pub fn passphrase_acceptable(passphrase: &str) -> bool {
-    crate::passphrase::acceptable(passphrase)
+    fob_core::passphrase::acceptable(passphrase)
+}
+
+/// Human-readable reason a passphrase fails the bar, or empty string if it
+/// passes. Shared so the browser and CLI surface the same message.
+#[wasm_bindgen]
+pub fn passphrase_rejection_reason(passphrase: &str) -> String {
+    fob_core::passphrase::rejection_reason(passphrase)
+        .unwrap_or("")
+        .to_string()
 }
 
 fn js_err(e: impl std::fmt::Display) -> JsValue {
@@ -268,5 +277,3 @@ pub fn init_panic_hook() {
 fn serde_wasm<T: serde::Serialize>(v: &T) -> Result<JsValue, JsValue> {
     serde_wasm_bindgen::to_value(v).map_err(|e| JsValue::from_str(&e.to_string()))
 }
-
-mod passphrase;
