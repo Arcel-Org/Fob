@@ -7,38 +7,64 @@
 <title>Fob — Header Inspector</title>
 <style>
   :root{
-    --bg:#07090f; --surface:#0c1220; --surface2:#111827; --border:#1e2d47;
-    --blue:#3b82f6; --text:#e2e9f6; --text-2:#617698; --ok:#22c55e;
-    --warn:#f59e0b; --danger:#ef4444; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --bg:#06080f; --surface:#0b1220; --surface2:#101a2e; --surface3:#16233d;
+    --border:#1c2b47; --border2:#2a3f63;
+    --blue:#3b82f6; --indigo:#6366f1; --violet:#8b5cf6;
+    --text:#e6edf8; --text-2:#8ba1c4; --text-3:#4a5f85;
+    --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    --grad:linear-gradient(120deg,#3b82f6 0%,#6366f1 50%,#8b5cf6 100%);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  .wrap{max-width:720px;margin:0 auto;padding:48px 24px 80px}
-  a{color:var(--blue);text-decoration:none}
-  h1{font-size:24px;margin-bottom:6px}
-  .muted{color:var(--text-2)}
-  #drop{background:var(--surface);border:2px dashed var(--border);border-radius:12px;padding:48px 20px;text-align:center;color:var(--text-2);margin:28px 0;transition:border-color .2s;cursor:pointer}
-  #drop.over{border-color:var(--blue);color:var(--text)}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh}
+  .bg{position:fixed;inset:0;z-index:-1;overflow:hidden}
+  .orb{position:absolute;border-radius:50%;filter:blur(100px);opacity:.26}
+  .orb-1{width:520px;height:520px;top:-200px;left:-160px;background:radial-gradient(circle,#1e3caa,transparent 70%)}
+  .orb-2{width:440px;height:440px;bottom:-180px;right:-140px;background:radial-gradient(circle,#4f1ea0,transparent 70%)}
+  .wrap{max-width:760px;margin:0 auto;padding:44px 24px 80px}
+  .back{display:inline-flex;align-items:center;gap:7px;color:var(--text-2);font-size:14px;font-weight:500;margin-bottom:26px}
+  .back:hover{color:var(--text);text-decoration:none}
+  h1{font-size:30px;font-weight:800;letter-spacing:-.8px;margin-bottom:8px}
+  h1 .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .sub{color:var(--text-2);font-size:15px;max-width:640px}
+  .sub b{color:var(--text)}
+  #drop{background:var(--surface);border:2px dashed var(--border2);border-radius:16px;padding:60px 20px;text-align:center;color:var(--text-2);margin:32px 0 8px;transition:all .2s ease;cursor:pointer}
+  #drop:hover{border-color:var(--blue);background:var(--surface2)}
+  #drop.over{border-color:var(--blue);background:var(--surface2);transform:scale(1.01)}
+  #drop .big{font-size:40px;margin-bottom:14px}
+  #drop .t{font-size:17px;font-weight:600;color:var(--text);margin-bottom:4px}
+  #drop .s{font-size:13.5px}
   #file{display:none}
-  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:16px}
-  td{padding:12px 16px;border-top:1px solid var(--border);font-size:14px}
-  td:first-child{color:var(--text-2);width:42%;white-space:nowrap}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-top:20px}
+  tr{border-top:1px solid var(--border)}
+  tr:first-child{border-top:none}
+  td{padding:14px 18px;font-size:14px}
+  td:first-child{color:var(--text-2);width:42%;white-space:nowrap;font-weight:500}
   td:last-child{font-family:var(--mono);font-size:13px}
-  .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .pill{display:inline-block;padding:3px 12px;border-radius:999px;font-size:12px;font-weight:700}
   .v4{background:rgba(34,197,94,.12);color:var(--ok)}
   .ok{color:var(--ok)}
   .warn{color:var(--warn)}
   .bad{color:var(--danger)}
-  .note{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-top:16px;color:var(--text-2);font-size:13.5px}
+  .muted{color:var(--text-2)}
+  .note{display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-top:18px;color:var(--text-2);font-size:13.5px}
+  .note .shield{font-size:18px;flex-shrink:0}
+  #err{display:none;background:rgba(239,68,68,.1);border:1px solid var(--danger);color:var(--danger);border-radius:12px;padding:16px 18px;margin-top:20px;font-size:14px}
 </style>
 </head>
 <body>
+<div class="bg"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
 <div class="wrap">
-  <p><a href="index.html">← Back</a></p>
-  <h1>Header inspector</h1>
-  <p class="muted">Reads only the <b>public</b> header of a Fob vault — format version, KDF and its parameters, recovery-key status, and fingerprint. No passphrase is asked for and nothing is ever decrypted. All parsing runs locally in your browser.</p>
+  <a class="back" href="index.html">← Back to Fob</a>
+  <h1>Header <span class="grad">inspector</span></h1>
+  <p class="sub">Reads only the <b>public</b> header of a Fob vault — format version, KDF and its parameters, recovery-key status, and fingerprint. No passphrase is asked for and nothing is ever decrypted. All parsing runs locally in your browser.</p>
 
-  <div id="drop">Drop a <b>vault.fob</b> file here, or click to choose</div>
+  <div id="drop">
+    <div class="big">🗄️</div>
+    <div class="t">Drop a vault.fob here</div>
+    <div class="s">or click to choose a file</div>
+  </div>
   <input type="file" id="file" accept=".fob,application/octet-stream">
 
   <div id="result" style="display:none">
@@ -51,9 +77,9 @@
       <tr><td>Recovery key</td><td><span id="r-recov"></span></td></tr>
       <tr><td>Fingerprint</td><td><span id="r-fp"></span></td></tr>
     </table>
-    <div class="note">This is <b>public metadata</b> — anyone who has the file can read it. The vault contents (passwords, codes, keys) are encrypted and cannot be read without your passphrase, which is never handled here.</div>
+    <div class="note"><span class="shield">🛡️</span><span>This is <b>public metadata</b> — anyone who has the file can read it. The vault contents (passwords, codes, keys) are encrypted and cannot be read without your passphrase, which is never handled here.</span></div>
   </div>
-  <div id="err" style="display:none;background:rgba(239,68,68,.1);border:1px solid var(--danger);color:var(--danger);border-radius:10px;padding:16px 18px;margin-top:16px"></div>
+  <div id="err"></div>
 </div>
 
 
@@ -852,8 +878,9 @@ fileInput.addEventListener('change', () => { if (fileInput.files[0]) inspect(fil
 function setText(id, v){ document.getElementById(id).textContent = v; }
 function show(ok, msg){
   const err = document.getElementById('err');
-  if (ok){ err.style.display='none'; document.getElementById('result').style.display=''; }
-  else { document.getElementById('result').style.display='none'; err.style.display=''; err.textContent = msg; }
+  const res = document.getElementById('result');
+  if (ok){ err.style.display='none'; res.style.display='block'; }
+  else { res.style.display='none'; err.style.display='block'; err.textContent = msg; }
 }
 
 function inspect(file){
