@@ -3,9 +3,8 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # curl -fsSL https://raw.githubusercontent.com/Arcel-Org/Fob/main/install/install.sh | sh
 #
-# Downloads the fob + fob-agent binaries, verifies them, and runs the
-# interactive TUI setup wizard. Falls back to building from source if no
-# release is published yet.
+# Downloads the fob + fob-agent binaries and verifies them. Falls back to
+# building from source if no release is published yet.
 #
 # Flags:
 #   --version=vX.Y.Z   install a specific release (default: latest)
@@ -268,20 +267,23 @@ if [ "$MODIFY_PATH" = "1" ]; then
   fi
 fi
 
-# ── launch setup wizard ───────────────────────────────────────────────────────
+# ── next steps ────────────────────────────────────────────────────────────────
 printf '\n'
 hr
 say "Fob installed."
 hr
 printf '\n'
-
-# Only auto-launch the interactive TUI when we actually have a terminal —
-# a piped `curl | sh` install still has a TTY on stdin/stdout in a normal
-# terminal session, but not when run from a script/CI, over `ssh cmd`, etc.
+say "The fob command only installs/updates and manages USB drives."
+say "Day-to-day use happens in the browser vault on the USB itself."
+printf '\n'
+say "Quick start:"
+say "  1. fob status              — list USB drives"
+say "  2. fob format /dev/sdX     — format a USB stick and create a vault"
+say "  3. Open index.html on the USB in a browser — that is the vault."
+printf '\n'
+say "See https://github.com/Arcel-Org/Fob for details."
 if [ -t 0 ] && [ -t 1 ]; then
-  say "Launching Fob setup..."
-  printf '\n'
-  exec "${FOB_INSTALL_DIR}/fob"
+  say "Run 'fob status' (or '${FOB_INSTALL_DIR}/fob status' if not yet on PATH)."
 else
-  say "Run 'fob' (or '${FOB_INSTALL_DIR}/fob' if not yet on PATH) to get started."
+  say "Run 'fob' (or '${FOB_INSTALL_DIR}/fob' if not yet on PATH)."
 fi
