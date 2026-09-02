@@ -1,0 +1,1696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' 'wasm-unsafe-eval'; img-src data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
+<title>Fob — Encrypted Vault</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzQyNTdlNSIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTMiIHI9IjMuNiIgZmlsbD0id2hpdGUiLz48cGF0aCBkPSJNMTMuMSAxNS42TDEwLjYgMjRIMjEuNEwxOC45IDE1LjZaIiBmaWxsPSJ3aGl0ZSIvPjwvc3ZnPg==">
+<style>
+:root {
+  --bg:        #07090f;
+  --surface:   #0c1220;
+  --surface2:  #111827;
+  --surface3:  #17213a;
+  --border:    #1e2d47;
+  --border2:   #28405e;
+
+  --blue:      #3b82f6;
+  --blue-dim:  #0c1e3d;
+  --blue-glow: rgba(59,130,246,.13);
+
+  --text:      #e2e9f6;
+  --text-2:    #617698;
+  --text-3:    #273855;
+
+  --ok:        #22c55e;
+  --ok-dim:    #052012;
+  --warn:      #f59e0b;
+  --danger:    #ef4444;
+  --danger-dim:#1f0808;
+
+  --radius:    10px;
+  --radius-lg: 16px;
+  --radius-sm: 7px;
+  --radius-xs: 4px;
+
+  --sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+  --sidebar-w: 210px;
+  --topbar-h:  48px;
+  --t: .14s ease;
+}
+
+@keyframes fadeInUp  { from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)} }
+@keyframes fadeIn    { from{opacity:0}to{opacity:1} }
+@keyframes modalIn   { from{opacity:0;transform:scale(.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)} }
+@keyframes orb1      { 0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(7%,-5%) scale(1.07)} }
+@keyframes orb2      { 0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-5%,7%) scale(1.05)} }
+@keyframes spin      { to{transform:rotate(360deg)} }
+@keyframes pulse     { 0%,100%{opacity:1}50%{opacity:.45} }
+@keyframes codePop   { 0%{transform:scale(1)}50%{transform:scale(1.04)}100%{transform:scale(1)} }
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;overflow:hidden;-webkit-font-smoothing:antialiased}
+button{cursor:pointer;font-family:inherit}
+input,textarea{font-family:inherit}
+a{color:var(--blue);text-decoration:none}
+svg{display:block;flex-shrink:0}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── Lock screen ─────────────────────────────────────────────────── */
+#lock-screen{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:32px}
+.lock-bg{position:absolute;inset:0;pointer-events:none;z-index:0}
+.lock-orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.35;will-change:transform}
+.lock-orb-1{width:560px;height:560px;top:-180px;left:-140px;background:radial-gradient(circle,#1e3caa 0%,transparent 70%);animation:orb1 15s ease-in-out infinite}
+.lock-orb-2{width:440px;height:440px;bottom:-140px;right:-100px;background:radial-gradient(circle,#4f1ea0 0%,transparent 70%);animation:orb2 19s ease-in-out infinite}
+.lock-grid{position:absolute;inset:0;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse 65% 55% at 50% 50%,black 30%,transparent 100%);opacity:.2}
+
+.brand{display:flex;flex-direction:column;align-items:center;gap:10px;position:relative;z-index:1;animation:fadeInUp .45s ease both}
+.brand-logo{width:60px;height:60px;border-radius:18px;background:linear-gradient(145deg,#1e3abb 0%,#4257e5 55%,#6366f1 100%);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1px rgba(255,255,255,.1),0 4px 28px rgba(59,130,246,.4),inset 0 1px 0 rgba(255,255,255,.15)}
+.brand-name{font-size:22px;font-weight:700;letter-spacing:-.4px;background:linear-gradient(135deg,#dde4f0 0%,#8ba3d4 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.brand-tagline{font-size:13px;color:var(--text-2)}
+
+.lock-card{background:rgba(12,18,32,.9);border:1px solid var(--border);border-radius:var(--radius-lg);padding:28px 32px;width:390px;display:flex;flex-direction:column;gap:18px;box-shadow:0 8px 48px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04);backdrop-filter:blur(20px);position:relative;z-index:1}
+.lock-card-title{font-size:16px;font-weight:600;letter-spacing:-.2px}
+.lock-card-sub{font-size:13px;color:var(--text-2);margin-top:2px;line-height:1.6}
+
+/* vault-found badge */
+.vault-badge{display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.vault-badge-icon{width:38px;height:38px;border-radius:10px;background:var(--blue-dim);border:1px solid rgba(59,130,246,.2);display:flex;align-items:center;justify-content:center;color:var(--blue);flex-shrink:0}
+.vault-badge-name{font-size:13px;font-weight:500;color:var(--text)}
+.vault-badge-hint{font-size:12px;color:var(--text-2);margin-top:1px}
+
+/* ── Forms ───────────────────────────────────────────────────────── */
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;font-weight:700;color:var(--text-2);letter-spacing:.05em;text-transform:uppercase}
+.field input,.field textarea{background:var(--bg);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);padding:10px 12px;font-size:14px;outline:none;width:100%;transition:border-color var(--t),box-shadow var(--t)}
+.field input:focus,.field textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow)}
+.field input.error{border-color:var(--danger)}
+.field input::placeholder,.field textarea::placeholder{color:var(--text-3)}
+.pass-wrap{position:relative}
+.pass-wrap input{padding-right:40px}
+.pass-toggle{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-3);padding:6px;border-radius:6px;display:flex;transition:color var(--t),background var(--t)}
+.pass-toggle:hover{color:var(--text);background:var(--surface2)}
+.pass-toggle.accent:hover{color:var(--blue);background:var(--blue-dim)}
+
+/* Collapsible "advanced" section — custom, not native <details>, so it
+   animates smoothly and matches the rest of the app's look. */
+.advanced-toggle{display:flex;align-items:center;gap:7px;background:none;border:none;color:var(--text-2);font-size:12.5px;font-weight:600;cursor:pointer;padding:2px 0;width:100%;text-align:left;transition:color var(--t)}
+.advanced-toggle:hover{color:var(--text)}
+.advanced-toggle-icon{display:flex;transition:transform var(--t) ease;color:var(--text-3)}
+.advanced-toggle[aria-expanded="true"] .advanced-toggle-icon{transform:rotate(90deg)}
+.advanced-panel{display:flex;flex-direction:column;gap:14px;max-height:0;overflow:hidden;transition:max-height .28s ease,opacity .2s ease;opacity:0}
+.advanced-panel.open{max-height:280px;opacity:1;transition:max-height .32s ease,opacity .28s ease .04s}
+
+/* Password strength meter */
+.pw-strength{display:flex;gap:3px;margin-top:7px}
+.pw-strength-seg{height:3px;flex:1;border-radius:2px;background:var(--border);transition:background .2s ease}
+.pw-strength-label{font-size:11px;color:var(--text-3);margin-top:5px;transition:color .2s ease;min-height:14px}
+
+.btn-row{display:flex;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:none;border-radius:var(--radius-sm);padding:10px 18px;font-size:13.5px;font-weight:500;transition:all var(--t);letter-spacing:-.01em;white-space:nowrap}
+.btn:hover{filter:brightness(1.1)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.4;cursor:not-allowed;filter:none;transform:none}
+.btn-primary{background:var(--blue);color:#fff;width:100%;box-shadow:0 2px 12px rgba(59,130,246,.3)}
+.btn-primary:hover{box-shadow:0 4px 20px rgba(59,130,246,.45)}
+.btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border2)}
+.btn-danger{background:var(--danger-dim);color:var(--danger);border:1px solid rgba(239,68,68,.25)}
+.btn-ghost{background:transparent;color:var(--text-2);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-sm{padding:6px 12px;font-size:12px}
+.err-msg{font-size:12px;color:var(--danger);min-height:16px}
+.spinner{width:15px;height:15px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .65s linear infinite;flex-shrink:0}
+
+.or-divider{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-3)}
+.or-divider::before,.or-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.vault-picker{display:flex;flex-direction:column;align-items:center;gap:11px;padding:22px;border:1px dashed var(--border2);border-radius:var(--radius);text-align:center;cursor:pointer;transition:border-color var(--t),background var(--t);background:rgba(59,130,246,.02)}
+.vault-picker:hover,.vault-picker.drag-over{border-color:var(--blue);background:var(--blue-dim);border-style:solid}
+.vault-picker-icon{width:42px;height:42px;border-radius:12px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-2)}
+.vault-picker-text{font-size:13px;font-weight:500;color:var(--text)}
+.vault-picker-hint{font-size:12px;color:var(--text-2)}
+.forget-link{font-size:11.5px;color:var(--text-3);background:none;border:none;cursor:pointer;text-decoration:underline;text-decoration-style:dotted}
+.forget-link:hover{color:var(--text-2)}
+
+/* ── Vault UI ────────────────────────────────────────────────────── */
+#vault-ui{display:none;flex-direction:column;height:100vh}
+.topbar{height:var(--topbar-h);display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--border);gap:10px;flex-shrink:0;background:var(--surface)}
+.topbar-logo{width:28px;height:28px;border-radius:8px;flex-shrink:0;background:linear-gradient(145deg,#1e3abb,#6366f1);display:flex;align-items:center;justify-content:center}
+.topbar-title{font-weight:700;font-size:14px;letter-spacing:-.2px}
+.topbar-sep{width:1px;height:16px;background:var(--border2);flex-shrink:0}
+.topbar-badge{background:var(--ok-dim);color:var(--ok);border-radius:var(--radius-xs);font-size:11px;font-weight:700;padding:2px 8px;letter-spacing:.07em;display:flex;align-items:center;gap:5px}
+.topbar-fp{color:var(--text-3);font-size:11px;font-family:var(--mono);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-clock{font-size:12px;color:var(--text-2);font-family:var(--mono)}
+
+.vault-body{display:flex;flex:1;overflow:hidden}
+
+/* ── Sidebar ─────────────────────────────────────────────────────── */
+.sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;padding:10px 0}
+.sidebar-section{font-size:10px;font-weight:700;color:var(--text-3);letter-spacing:.1em;text-transform:uppercase;padding:10px 16px 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 12px 8px 14px;cursor:pointer;margin:1px 8px;border-radius:var(--radius-sm);transition:background var(--t),color var(--t);font-size:13px;font-weight:500;color:var(--text-2);user-select:none;position:relative}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{color:var(--text);background:var(--blue-dim)}
+.nav-item.active::before{content:'';position:absolute;left:-8px;top:5px;bottom:5px;width:3px;background:var(--blue);border-radius:0 2px 2px 0}
+.nav-item .ni{color:var(--text-3);transition:color var(--t)}
+.nav-item:hover .ni,.nav-item.active .ni{color:var(--blue)}
+.nav-count{margin-left:auto;background:var(--surface2);border-radius:10px;padding:1px 7px;font-size:11px;color:var(--text-3)}
+.nav-item.active .nav-count{background:rgba(59,130,246,.15);color:var(--blue)}
+.sidebar-divider{border:none;border-top:1px solid var(--border);margin:8px 0}
+.sidebar-action{display:flex;align-items:center;gap:9px;padding:8px 12px 8px 14px;cursor:pointer;margin:1px 8px;border-radius:var(--radius-sm);transition:background var(--t),color var(--t);font-size:13px;color:var(--text-2)}
+.sidebar-action:hover{background:var(--surface2);color:var(--text)}
+.sidebar-action.danger:hover{color:var(--danger);background:var(--danger-dim)}
+.sidebar-action .ni{color:var(--text-3)}
+.sidebar-action:hover .ni{color:inherit}
+.sidebar-action.danger:hover .ni{color:var(--danger)}
+
+/* ── Content ─────────────────────────────────────────────────────── */
+.content{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.content-header{padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--surface)}
+.content-title{font-size:15px;font-weight:600;letter-spacing:-.2px}
+.content-count{color:var(--text-3);font-size:13px}
+.search-box{margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);display:flex;align-items:center;padding:0 10px;gap:7px;transition:border-color var(--t),box-shadow var(--t)}
+.search-box:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-glow)}
+.search-box input{background:transparent;border:none;color:var(--text);font-size:13px;outline:none;padding:7px 0;width:150px}
+.search-box input::placeholder{color:var(--text-3)}
+.search-box .ni{color:var(--text-3)}
+.add-btn{display:flex;align-items:center;gap:6px;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);padding:7px 14px;font-size:13px;font-weight:600;box-shadow:0 2px 8px rgba(59,130,246,.3);transition:all var(--t);flex-shrink:0}
+.add-btn:hover{filter:brightness(1.1);box-shadow:0 4px 14px rgba(59,130,246,.45)}
+.add-btn:active{transform:scale(.98)}
+.content-body{display:flex;flex:1;overflow:hidden}
+
+/* ── Entry list ──────────────────────────────────────────────────── */
+.entry-list{width:272px;border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0}
+.entry-item{padding:11px 14px;border-bottom:1px solid rgba(30,45,71,.5);cursor:pointer;transition:background var(--t);display:flex;align-items:center;gap:11px}
+.entry-item:hover{background:rgba(59,130,246,.06)}
+.entry-item.selected{background:var(--blue-dim);border-left:3px solid var(--blue);padding-left:11px}
+.entry-avatar{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:rgba(255,255,255,.92);flex-shrink:0;letter-spacing:-.5px}
+.entry-text{overflow:hidden;min-width:0}
+.entry-name{font-weight:500;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.entry-sub{font-size:12px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+
+.entry-empty{padding:48px 20px;text-align:center;color:var(--text-3);font-size:13px;line-height:1.8;display:flex;flex-direction:column;align-items:center;gap:12px}
+.entry-empty-icon{width:48px;height:48px;border-radius:14px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-3)}
+
+/* ── Detail panel ────────────────────────────────────────────────── */
+.detail-panel{flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column}
+.detail-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-3);font-size:13px;gap:10px}
+.detail-empty-icon{width:52px;height:52px;border-radius:14px;background:var(--surface2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-3)}
+
+.detail-header{display:flex;align-items:center;gap:14px;padding-bottom:20px;border-bottom:1px solid var(--border);margin-bottom:22px;flex-shrink:0}
+.detail-avatar{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:rgba(255,255,255,.92);flex-shrink:0;letter-spacing:-1px}
+.detail-hinfo{flex:1;min-width:0}
+.detail-title{font-size:18px;font-weight:700;letter-spacing:-.3px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail-subtitle{font-size:12px;color:var(--text-3);margin-top:3px}
+.detail-type-badge{display:none}
+
+.detail-field{margin-bottom:12px}
+.detail-field-label{font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.detail-field-row{display:flex;gap:6px}
+.detail-field-value{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:13.5px;color:var(--text);min-width:0;word-break:break-all;line-height:1.5;align-self:center}
+.detail-field-value.masked{font-family:var(--mono);font-size:18px;letter-spacing:.06em;color:var(--text-3);line-height:1.2}
+.detail-field-textarea{font-family:inherit;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:13px;color:var(--text);width:100%;line-height:1.7;resize:none;outline:none;display:block}
+
+.detail-url-link{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;font-size:13px;color:var(--blue);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;transition:border-color var(--t)}
+.detail-url-link:hover{border-color:var(--blue);background:var(--blue-dim)}
+
+.detail-meta{font-size:12px;color:var(--text-3);margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:20px}
+.detail-meta-item{display:flex;flex-direction:column;gap:3px}
+.detail-meta-label{font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em}
+.detail-meta-val{font-size:12.5px;color:var(--text-2)}
+
+.danger-zone{margin-top:28px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:8px}
+.danger-zone .btn{flex:1}
+
+.copy-btn{background:var(--surface2);color:var(--text-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 13px;font-size:12px;font-weight:500;display:flex;align-items:center;gap:5px;transition:all var(--t);flex-shrink:0;white-space:nowrap;cursor:pointer}
+.copy-btn:hover{background:var(--border2);color:var(--text)}
+.copy-btn.copied{color:var(--ok);border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.06)}
+
+.reveal-btn{background:var(--surface2);color:var(--text-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 13px;font-size:12px;font-weight:500;display:flex;align-items:center;gap:5px;transition:all var(--t);flex-shrink:0;cursor:pointer}
+.reveal-btn:hover{background:var(--border2);color:var(--text)}
+
+/* ── TOTP panel ──────────────────────────────────────────────────── */
+.totp-panel{display:none;flex:1;overflow-y:auto;padding:20px 24px}
+.totp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.totp-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;transition:border-color var(--t),box-shadow var(--t)}
+.totp-card:hover{border-color:var(--border2);box-shadow:0 4px 20px rgba(0,0,0,.2)}
+.totp-card-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.totp-card-info{flex:1;overflow:hidden}
+.totp-card-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.totp-card-account{font-size:12px;color:var(--text-3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.totp-code-wrap{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:12px;text-align:center}
+.totp-code{font-family:var(--mono);font-size:30px;font-weight:800;letter-spacing:.3em;color:var(--text);line-height:1}
+.totp-code.warn{color:var(--warn)}
+.totp-code.crit{color:var(--danger);animation:pulse .8s ease infinite}
+.totp-bar{height:2px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:10px}
+.totp-fill{height:100%;border-radius:2px;transition:width 1s linear,background .5s;background:var(--ok)}
+.totp-fill.warn{background:var(--warn)}
+.totp-fill.crit{background:var(--danger)}
+.totp-foot{display:flex;justify-content:space-between;align-items:center}
+.totp-secs{font-size:12px;color:var(--text-3)}
+.totp-card-actions{display:flex;gap:6px}
+
+/* ── Modal ───────────────────────────────────────────────────────── */
+.modal-backdrop{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.65);align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.modal-backdrop.open{display:flex;animation:fadeIn .15s ease}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:26px 30px;width:450px;max-height:90vh;overflow-y:auto;box-shadow:0 12px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.04);display:flex;flex-direction:column;gap:16px;animation:modalIn .18s ease;transition:width .2s ease}
+.modal-sm{width:340px;padding:24px}
+.modal-wide{width:600px}
+.modal-title{font-size:16px;font-weight:700;letter-spacing:-.2px}
+.modal-sub{font-size:13px;color:var(--text-2);line-height:1.6}
+.modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:4px}
+.confirm-icon{width:44px;height:44px;border-radius:12px;background:var(--danger-dim);border:1px solid rgba(239,68,68,.2);display:flex;align-items:center;justify-content:center;color:var(--danger)}
+
+/* ── Toast ───────────────────────────────────────────────────────── */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 18px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5);opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:999;display:flex;align-items:center;gap:8px;max-width:420px}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{color:var(--ok);border-color:rgba(34,197,94,.2)}
+#toast.err{color:var(--danger);border-color:rgba(239,68,68,.2)}
+</style>
+</head>
+<body>
+
+<!-- ══ LOCK SCREEN ════════════════════════════════════════════════ -->
+<div id="lock-screen">
+  <div class="lock-bg">
+    <div class="lock-orb lock-orb-1"></div>
+    <div class="lock-orb lock-orb-2"></div>
+    <div class="lock-grid"></div>
+  </div>
+
+  <div class="brand">
+    <div class="brand-logo">
+      <svg viewBox="0 0 30 35" fill="none" width="30" height="35">
+        <path d="M15 1.5L27.5 6.5V18C27.5 24.6 21.9 30.4 15 33C8.1 30.4 2.5 24.6 2.5 18V6.5L15 1.5Z" fill="rgba(255,255,255,.1)" stroke="rgba(255,255,255,.22)" stroke-width=".75"/>
+        <circle cx="15" cy="13.2" r="3.4" fill="white"/>
+        <path d="M12.3 15.6L10.1 23.5H19.9L17.7 15.6Z" fill="white"/>
+      </svg>
+    </div>
+    <div class="brand-name">Fob</div>
+    <div class="brand-tagline">Encrypted USB Vault</div>
+  </div>
+
+  <!-- Vault saved in browser — just enter passphrase -->
+  <div class="lock-card" id="card-unlock" style="display:none">
+    <div>
+      <div class="lock-card-title">Welcome back</div>
+    </div>
+    <div class="vault-badge" id="unlock-badge">
+      <div class="vault-badge-icon">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><rect x="2.5" y="7" width="11" height="7.5" rx="1.5"/><path d="M5 7V5.5a3 3 0 016 0V7"/></svg>
+      </div>
+      <div>
+        <div class="vault-badge-name">Encrypted Vault</div>
+        <div class="vault-badge-hint" id="unlock-vault-hint">Saved in browser</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Passphrase</label>
+      <div class="pass-wrap">
+        <input id="passphrase" type="password" autocomplete="off" spellcheck="false" placeholder="Enter your passphrase" />
+        <button class="pass-toggle" type="button" data-action="toggle-pass" title="Show/hide">
+          <svg id="eye-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M1 8C1 8 4 3.5 8 3.5s7 4.5 7 4.5-3 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="err-msg" id="unlock-err"></div>
+    <button class="btn btn-primary" id="unlock-btn" data-action="unlock">Unlock Vault</button>
+    <button class="forget-link" data-action="forget">Use a different vault</button>
+  </div>
+
+  <!-- No vault saved — pick or create (visible by default; JS replaces if vault found) -->
+  <div class="lock-card" id="card-pick">
+    <div>
+      <div class="lock-card-title">Get started</div>
+      <div class="lock-card-sub">Open an existing vault or create a new one.</div>
+    </div>
+    <div class="vault-picker" id="pick-zone" data-action="pick-vault">
+      <div class="vault-picker-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M10 13V4"/><path d="M7 7l3-3 3 3"/><rect x="3" y="14" width="14" height="4" rx="1.5"/></svg>
+      </div>
+      <div class="vault-picker-text">Open vault.fob</div>
+      <div class="vault-picker-hint">Click to browse, or drag and drop</div>
+    </div>
+    <div class="or-divider">or</div>
+    <button class="btn btn-ghost" data-action="show-create" style="width:100%">
+      <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="13" height="13"><path d="M7 2v10M2 7h10"/></svg>
+      Create a new vault
+    </button>
+    <div class="err-msg" id="pick-err"></div>
+  </div>
+
+  <!-- Create new vault -->
+  <div class="lock-card" id="card-create" style="display:none">
+    <div>
+      <div class="lock-card-title">Create vault</div>
+      <div class="lock-card-sub">Choose a strong passphrase. You cannot recover it if forgotten.</div>
+    </div>
+    <div class="field">
+      <label>New Passphrase</label>
+      <input id="create-pass" type="password" autocomplete="new-password" spellcheck="false" placeholder="Choose a strong passphrase" />
+    </div>
+    <div class="field">
+      <label>Confirm Passphrase</label>
+      <input id="create-pass2" type="password" autocomplete="new-password" spellcheck="false" placeholder="Confirm passphrase" />
+    </div>
+    <button type="button" class="advanced-toggle" data-action="toggle-advanced" aria-expanded="false" aria-controls="create-advanced">
+      <span class="advanced-toggle-icon">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="10" height="10"><path d="M4 2l4 4-4 4"/></svg>
+      </span>
+      Advanced: decoy &amp; duress passphrases
+    </button>
+    <div class="advanced-panel" id="create-advanced">
+      <div class="lock-card-sub">
+        A decoy passphrase opens a second vault with fake data — useful under
+        coercion. A duress passphrase silently destroys this vault instead of
+        opening it. Leave blank to skip either.
+      </div>
+      <div class="field">
+        <label>Decoy Passphrase</label>
+        <input id="create-decoy-pass" type="password" autocomplete="new-password" spellcheck="false" placeholder="Optional — opens a fake vault" />
+      </div>
+      <div class="field">
+        <label>Duress Passphrase</label>
+        <input id="create-duress-pass" type="password" autocomplete="new-password" spellcheck="false" placeholder="Optional — destroys this vault" />
+      </div>
+    </div>
+    <div class="err-msg" id="create-err"></div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" data-action="back-to-pick" style="flex:1">← Back</button>
+      <button class="btn btn-primary" id="create-btn" data-action="create-vault" style="flex:2">Create Vault</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ VAULT UI ═══════════════════════════════════════════════════ -->
+<div id="vault-ui">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <svg viewBox="0 0 30 35" fill="none" width="16" height="19">
+        <path d="M15 1.5L27.5 6.5V18C27.5 24.6 21.9 30.4 15 33C8.1 30.4 2.5 24.6 2.5 18V6.5L15 1.5Z" fill="rgba(255,255,255,.15)" stroke="rgba(255,255,255,.3)" stroke-width=".75"/>
+        <circle cx="15" cy="13.2" r="3.4" fill="white"/>
+        <path d="M12.3 15.6L10.1 23.5H19.9L17.7 15.6Z" fill="white"/>
+      </svg>
+    </div>
+    <span class="topbar-title">Fob</span>
+    <span style="font-size:11px;color:var(--text-3);font-family:var(--mono)" id="tb-version"></span>
+    <div class="topbar-sep"></div>
+    <span class="topbar-badge" id="tb-badge">
+      <svg viewBox="0 0 8 8" width="6" height="6"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg>
+      UNLOCKED
+    </span>
+    <span class="topbar-fp" id="tb-fp"></span>
+    <div class="topbar-right">
+      <span class="topbar-clock" id="tb-clock"></span>
+    </div>
+  </div>
+
+  <div class="vault-body">
+    <div class="sidebar">
+      <div class="sidebar-section">Vault</div>
+      <div class="nav-item active" data-view="passwords">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="5.5" cy="5.5" r="3.5"/><path d="M8 8.5 12.5 13"/><path d="M11 11.5l1.5-1.5"/></svg></span>
+        Passwords <span class="nav-count" id="cnt-pw">0</span>
+      </div>
+      <div class="nav-item" data-view="totp">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3l2 1.5"/></svg></span>
+        Two-Factor <span class="nav-count" id="cnt-totp">0</span>
+      </div>
+      <div class="nav-item" data-view="ssh">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect x="1" y="2.5" width="14" height="11" rx="2"/><path d="M4 7l2.5 2L4 11"/><path d="M9.5 11h3"/></svg></span>
+        SSH Keys <span class="nav-count" id="cnt-ssh">0</span>
+      </div>
+      <div class="nav-item" data-view="notes">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M10 1.5H4.5a1 1 0 00-1 1v11a1 1 0 001 1h7a1 1 0 001-1V4.5L10 1.5z"/><path d="M10 1.5v3h3"/><path d="M5.5 7.5h5M5.5 10h3.5"/></svg></span>
+        Notes <span class="nav-count" id="cnt-notes">0</span>
+      </div>
+
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">Actions</div>
+      <div class="sidebar-action" data-action="export">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M8 3v9"/><path d="M5 9l3 3 3-3"/><path d="M3 13h10"/></svg></span>
+        Export to USB
+      </div>
+      <div class="sidebar-action" data-action="import">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M8 12V3"/><path d="M5 6l3-3 3 3"/><path d="M3 13h10"/></svg></span>
+        Import vault
+      </div>
+
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section">Session</div>
+      <div class="sidebar-action" data-action="lock">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><rect x="2.5" y="7" width="11" height="7.5" rx="1.5"/><path d="M5 7V5.5a3 3 0 016 0V7"/></svg></span>
+        Lock vault
+      </div>
+      <div class="sidebar-action danger" data-action="lock-close">
+        <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="15" height="15"><path d="M3 3l10 10M13 3L3 13"/></svg></span>
+        Lock &amp; close
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="content-header">
+        <span class="content-title" id="view-title">Passwords</span>
+        <span class="content-count" id="view-count"></span>
+        <div class="search-box" id="search-wrap">
+          <span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="14" height="14"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3"/></svg></span>
+          <input id="search" type="text" placeholder="Search…" />
+        </div>
+        <button class="add-btn" id="add-btn" data-action="add">
+          <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="13" height="13"><path d="M7 2v10M2 7h10"/></svg>
+          Add
+        </button>
+      </div>
+      <div class="content-body">
+        <div class="entry-list" id="entry-list"></div>
+        <div class="detail-panel" id="detail-panel"></div>
+        <div class="totp-panel" id="totp-panel"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ADD MODAL ══════════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="add-modal">
+  <div class="modal" id="modal">
+    <div class="modal-title" id="modal-title">Add entry</div>
+    <div id="modal-fields"></div>
+    <div class="err-msg" id="modal-err"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="modal-save" data-action="save-entry">Save entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CONFIRM MODAL ══════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="confirm-modal">
+  <div class="modal modal-sm">
+    <div class="confirm-icon">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M2 4.5h12"/><path d="M5 4.5V3h6v1.5"/><path d="M3.5 4.5l1 9h7l1-9"/></svg>
+    </div>
+    <div>
+      <div class="modal-title" id="confirm-title">Delete entry?</div>
+      <div class="modal-sub" id="confirm-sub">This action cannot be undone.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" data-action="confirm-no">Cancel</button>
+      <button class="btn btn-danger btn-sm" data-action="confirm-yes">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!--FOBWASM_INLINE_MARKER-->
+<script>
+'use strict';
+
+const VERSION = '0.1.0';
+
+// ── Icons ──────────────────────────────────────────────────────────
+const IC = {
+  key:      `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="5.5" cy="5.5" r="3.5"/><path d="M8 8.5 12.5 13"/><path d="M11 11.5l1.5-1.5"/></svg>`,
+  clock:    `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v3l2 1.5"/></svg>`,
+  terminal: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="1" y="2.5" width="14" height="11" rx="2"/><path d="M4 7l2.5 2L4 11"/><path d="M9.5 11h3"/></svg>`,
+  note:     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M10 1.5H4.5a1 1 0 00-1 1v11a1 1 0 001 1h7a1 1 0 001-1V4.5L10 1.5z"/><path d="M10 1.5v3h3"/><path d="M5.5 7.5h5M5.5 10h3.5"/></svg>`,
+  copy:     `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5"/></svg>`,
+  check:    `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M3 8l4 4 6-6"/></svg>`,
+  trash:    `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M2 4.5h12"/><path d="M5 4.5V3h6v1.5"/><path d="M3.5 4.5l1 9h7l1-9"/></svg>`,
+  eye:      `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M1 8C1 8 4 3.5 8 3.5s7 4.5 7 4.5-3 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/></svg>`,
+  eyeOff:   `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M2 2l12 12"/><path d="M8.8 3.2A7 7 0 018 3C4 3 1 8 1 8s.9 1.6 2.4 2.9"/><path d="M11.2 5A7 7 0 0115 8s-3 5-7 5a7 7 0 01-2.5-.5"/></svg>`,
+  pencil:   `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13"><path d="M11 2l3 3-8 8H3v-3l8-8z"/><path d="M9.5 3.5l3 3"/></svg>`,
+  refresh:  `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2.5 8a5.5 5.5 0 019.9-3.3"/><path d="M13.5 8a5.5 5.5 0 01-9.9 3.3"/><path d="M12.5 2.5v3h-3"/><path d="M3.5 13.5v-3h3"/></svg>`,
+};
+
+// Avatar color palette (deterministic from name)
+const AVATAR_COLORS = ['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#f97316','#6366f1','#14b8a6','#84cc16'];
+function avatarColor(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0x7fffffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+function avatarLetter(str) { return esc((str||'?')[0].toUpperCase()); }
+
+// ── IndexedDB — vault bytes (primary storage) ─────────────────────
+// The encrypted vault lives here. Saves are instant/silent.
+// "Export to USB" is an explicit action the user triggers.
+const VAULTIDB_NAME  = 'fob-vault-data';
+const VAULTIDB_STORE = 'vault';
+const VAULTIDB_KEY   = 'bytes';
+
+function _openVaultDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(VAULTIDB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(VAULTIDB_STORE);
+    req.onsuccess = e => res(e.target.result);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+async function _saveVaultBytes(bytes) {
+  const db = await _openVaultDB();
+  const tx = db.transaction(VAULTIDB_STORE, 'readwrite');
+  tx.objectStore(VAULTIDB_STORE).put(bytes, VAULTIDB_KEY);
+  await new Promise((r, j) => { tx.oncomplete = r; tx.onerror = j; });
+  db.close();
+}
+async function _loadVaultBytes() {
+  try {
+    const db = await _openVaultDB();
+    const tx = db.transaction(VAULTIDB_STORE, 'readonly');
+    const b  = await new Promise((r, j) => {
+      const q = tx.objectStore(VAULTIDB_STORE).get(VAULTIDB_KEY);
+      q.onsuccess = () => r(q.result); q.onerror = () => j(q.error);
+    });
+    db.close(); return b || null;
+  } catch { return null; }
+}
+async function _clearVaultBytes() {
+  const db = await _openVaultDB();
+  const tx = db.transaction(VAULTIDB_STORE, 'readwrite');
+  tx.objectStore(VAULTIDB_STORE).delete(VAULTIDB_KEY);
+  db.close();
+}
+
+// ── State ──────────────────────────────────────────────────────────
+let vaultFileData   = null;  // Uint8Array of current encrypted vault
+let vaultFileHandle = null;  // FileSystemFileHandle for vaultFileData, if opened via
+                              // showOpenFilePicker — lets the duress wipe reach the
+                              // actual file on disk, not just our IndexedDB cache.
+                              // null whenever we don't have a writable handle (plain
+                              // <input type=file>, drag-drop, or the file:// fetch
+                              // auto-load path) — the duress wipe can't reach the
+                              // physical file in that case, only the local cache.
+let vaultPassphrase = null;  // Uint8Array — zeroized on lock
+let vaultJSON       = null;  // decrypted vault object
+let vaultSlot       = 0;     // which slot vaultJSON came from (0=main, 1=decoy)
+let currentView     = 'passwords';
+let selectedIdx     = -1;
+let searchQ         = '';
+let editingEntry    = null; // {field, id} of the entry the add-modal is editing, or null when adding
+let totpTimer       = null;
+let lockTimer       = null;
+let clipClearTimer  = null;
+const LOCK_MS       = 15 * 60 * 1000;
+
+// Copy/reveal cache — no sensitive data in inline event attrs
+const _dc  = {};
+let   _dcn = 0;
+const _totpMap = {};
+
+// ── Auto-lock ──────────────────────────────────────────────────────
+function resetLockTimer() {
+  if (!vaultJSON) return;
+  clearTimeout(lockTimer);
+  lockTimer = setTimeout(() => { doLock(); toast('Vault locked after inactivity.', 'ok'); }, LOCK_MS);
+}
+['keydown','click','mousemove','touchstart'].forEach(e =>
+  document.addEventListener(e, resetLockTimer, { passive: true })
+);
+
+// ── WebCrypto vault ────────────────────────────────────────────────
+//
+// One multi-slot format shared with the CLI (fob-core/src/{format,kdf,vault}.rs):
+// All cryptography runs in the embedded Rust WASM module (FobWasm), compiled
+// from crates/fob-wasm wrapping fob-core — the exact same implementation the
+// CLI and agent ship. There is deliberately NO hand-written WebCrypto here;
+// a second implementation that must stay bit-compatible is a correctness
+// hazard and is what used to lock the browser to v3/PBKDF2 (WebCrypto has no
+// Argon2id primitive). See format.rs for the byte layout.
+const HEADER_SIZE     = 100;
+const NUM_SLOTS       = 4;
+const SLOT_MAIN       = 0;
+const SLOT_DECOY      = 1;
+const SLOT_DURESS     = 2;
+const DEFAULT_VAULT_SIZE = 16 * 1024 * 1024;
+const MAX_VAULT_SIZE  = 1024 * 1024 * 1024; // must match fob-core/src/format.rs
+const FORMAT_VERSION  = 4; // must match fob-core/src/format.rs
+const GETRANDOM_MAX   = 65536; // crypto.getRandomValues() rejects larger single fills
+
+function fillRandom(buf) {
+  for (let off = 0; off < buf.length; off += GETRANDOM_MAX) {
+    crypto.getRandomValues(buf.subarray(off, Math.min(off + GETRANDOM_MAX, buf.length)));
+  }
+  return buf;
+}
+
+function cellSize(fileSize)          { return Math.floor((fileSize - HEADER_SIZE) / NUM_SLOTS); }
+function cellOffset(fileSize, slot)  { return HEADER_SIZE + slot * cellSize(fileSize); }
+
+// Overwrite the actual vault.fob file on disk with random bytes of the same
+// size, mirroring the CLI's duress wipe (fob-core/src/vault.rs::wipe_file).
+//
+// Only possible when we hold a live vaultFileHandle from
+// showOpenFilePicker() — a dropped File, a plain <input type=file>, and the
+// file:// fetch auto-load path never give a writable handle, so this is a
+// no-op for those (the IndexedDB cache clear alongside this call is the
+// only "wipe" that reaches those cases — see the README's Known
+// limitations for what that does and doesn't protect against).
+async function wipeVaultFile() {
+  if (!vaultFileHandle || !vaultFileData) return;
+  try {
+    const garbage = fillRandom(new Uint8Array(vaultFileData.length));
+    const w = await vaultFileHandle.createWritable();
+    await w.write(garbage);
+    await w.close();
+  } catch (_) {
+    // Best-effort: permission revoked, file moved, etc. — the IndexedDB
+    // clear still happens regardless.
+  } finally {
+    vaultFileHandle = null;
+  }
+}
+
+function parseHeader(fileBytes) {
+  if (fileBytes.length < HEADER_SIZE + 16) throw new Error('Vault file too small');
+  if (fileBytes.length > MAX_VAULT_SIZE) throw new Error('Vault file exceeds maximum supported size');
+  // All parsing and version/KDF checks live in Rust (FobWasm.parse_header);
+  // this wrapper throws a friendly message on the two browser-facing errors.
+  return FobWasm.parse_header(fileBytes);
+}
+
+// ── Vault unlock / save / create (all crypto in Rust WASM) ─────────────
+// passBytes here is a Uint8Array (the UTF-8 bytes of the passphrase, kept as
+// a buffer so it can be zeroed); the WASM API takes the passphrase as a JS
+// string, so we decode it at the boundary. Everything secret after that is
+// handled inside fob-core (zeroize on drop).
+
+/// Try a passphrase against Main, Decoy, then Duress in order.
+/// Returns { slot, json }. Throws 'Wrong passphrase' if none match.
+/// A SLOT_DURESS result is not itself distinguished from success here —
+/// callers MUST check `slot` and treat SLOT_DURESS as a wipe trigger, never
+/// as a normal unlock.
+function vaultUnlock(fileBytes, passBytes) {
+  const res = FobWasm.unlock_vault(fileBytes, new TextDecoder().decode(passBytes));
+  // res = { slot, json } where json is the Rust VaultBlob JSON string.
+  res.json = JSON.parse(res.json);
+  return res;
+}
+
+function vaultSave(fileBytes, passBytes, slot, json) {
+  return FobWasm.save_vault(fileBytes, new TextDecoder().decode(passBytes), slot, JSON.stringify(json));
+}
+
+/// Create a fresh v4 vault (Argon2id) with a main slot, and optionally a
+/// decoy and/or duress slot. Every slot cell — populated or not — is the
+/// same size and starts as random bytes, so an observer can't tell which
+/// slots (if any beyond the one they were given a passphrase for) are in use.
+function createVaultBytes(mainPass, decoyPass, duressPass) {
+  return FobWasm.create_vault(mainPass, decoyPass || null, duressPass || null, false);
+}
+
+// ── SSH key import ───────────────────────────────────────────────────
+// Fingerprint computation lives in Rust (FobWasm.ssh_fingerprint), matching
+// fob-core/src/sshkey.rs byte-for-byte.
+function sshFingerprint(publicKeyLine) {
+  return FobWasm.ssh_fingerprint(publicKeyLine);
+}
+function sshAlgorithm(publicKeyLine) {
+  const type = publicKeyLine.trim().split(/\s+/)[0] || '';
+  if (type === 'ssh-rsa') return 'Rsa';
+  if (type.startsWith('ecdsa-sha2-')) return 'Ecdsa';
+  return 'Ed25519';
+}
+
+// ── Password generator ──────────────────────────────────────────────
+// Randomness and charset live in Rust (FobWasm.generate_password).
+function generatePassword(length = 20) {
+  return FobWasm.generate_password(length);
+}
+
+// ── TOTP ───────────────────────────────────────────────────────────
+function base32Decode(s) {
+  const C = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  s = s.toUpperCase().replace(/[^A-Z2-7]/g,'');
+  const out=[]; let bits=0,val=0;
+  for (const c of s) {
+    const idx=C.indexOf(c); if(idx<0) throw new Error('Bad base32');
+    val=(val<<5)|idx; bits+=5;
+    if(bits>=8){bits-=8;out.push((val>>bits)&0xff);}
+  }
+  return new Uint8Array(out);
+}
+// Encode raw secret bytes back to the canonical (unpadded) base32 string —
+// used to render the stored byte-array secret back into the edit form.
+function base32Encode(bytes) {
+  const C = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0, val = 0, out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    val = (val << 8) | bytes[i]; bits += 8;
+    while (bits >= 5) { bits -= 5; out += C[(val >> bits) & 31]; }
+  }
+  if (bits > 0) out += C[(val << (5 - bits)) & 31];
+  return out;
+}
+// TOTP codes are computed in Rust (FobWasm.totp_code), so the browser and
+// CLI share one implementation. `secret` may be the stored raw byte array or
+// a base32 string; it's normalized to base32 at the boundary.
+function totp(secret, period=30, digits=6) {
+  const b32 = Array.isArray(secret) || secret instanceof Uint8Array
+    ? base32Encode(secret)
+    : secret;
+  return FobWasm.totp_code(b32, period, digits);
+}
+function totpSecsLeft(p=30){ return FobWasm.totp_seconds_remaining(p); }
+
+// ── Startup ────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // card-pick is visible by default in HTML; swap it out once we know what to show.
+  setupDragDrop();
+
+  // Async: check IDB then try to auto-load vault.fob from same dir (USB case).
+  // Runs after the pick card is already visible so nothing blocks the user.
+  (async () => {
+    try {
+      const savedBytes = await _loadVaultBytes();
+      if (savedBytes) {
+        vaultFileData = savedBytes;
+        vaultFileHandle = null; // IndexedDB has no live handle to the original file
+        showUnlockCard();
+        return;
+      }
+      if (location.protocol === 'file:') {
+        const vaultUrl = location.href.replace(/\/[^/?#]*$/, '/vault.fob');
+        const resp = await fetch(vaultUrl);
+        if (resp.ok) {
+          const arr = new Uint8Array(await resp.arrayBuffer());
+          if (arr.length > HEADER_SIZE) {
+            vaultFileData = arr;
+            vaultFileHandle = null; // fetch() is read-only, no writable handle
+            await _saveVaultBytes(arr);
+            showUnlockCard('vault.fob');
+          }
+        }
+      }
+    } catch (_) {}
+  })();
+
+  // Wire up search (oninput removed from HTML)
+  document.getElementById('search').addEventListener('input', onSearch);
+
+  // Live password-strength feedback in the add/edit modal (delegated since
+  // #mf-password is recreated fresh every time the modal opens).
+  document.addEventListener('input', e => {
+    if (e.target.id === 'mf-password') updatePasswordStrength(e.target.value);
+  });
+
+  // Single delegated click handler — replaces all inline onclick= attributes.
+  // Brave blocks inline event handlers on file:// via CSP; this works everywhere.
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-action]');
+    if (el) {
+      switch (el.dataset.action) {
+        case 'toggle-pass':  togglePassVis(); break;
+        case 'unlock':       doUnlock(); break;
+        case 'forget':       showPickCard(); break;
+        case 'pick-vault':   pickVaultFile(); break;
+        case 'show-create':  showCreateCard(); break;
+        case 'back-to-pick': showPickCard(); break;
+        case 'create-vault': doCreateVault(); break;
+        case 'export':       exportToUSB(); break;
+        case 'import':       importVault(); break;
+        case 'lock':         doLock(); break;
+        case 'lock-close':   doLockClose(); break;
+        case 'add':          openAddModal(); break;
+        case 'close-modal':  closeModal(); break;
+        case 'save-entry':   saveEntry(); break;
+        case 'confirm-no':   closeConfirm(false); break;
+        case 'confirm-yes':  closeConfirm(true); break;
+        case 'gen-password': fillGeneratedPassword(); break;
+        case 'toggle-advanced': toggleAdvanced(el); break;
+      }
+      return;
+    }
+    const nav = e.target.closest('.nav-item[data-view]');
+    if (nav) { switchView(nav.dataset.view); return; }
+    const entry = e.target.closest('[data-select-idx]');
+    if (entry) { selectEntry(Number(entry.dataset.selectIdx)); return; }
+    const del = e.target.closest('[data-delete-type]');
+    if (del) { deleteEntry(del.dataset.deleteType, del.dataset.deleteId, Number(del.dataset.deleteIdx)); return; }
+    const edit = e.target.closest('[data-edit-type]');
+    if (edit) { openEditModal(edit.dataset.editType, edit.dataset.editId); return; }
+  });
+
+  function setupDragDrop() {
+    const zone = document.getElementById('pick-zone');
+    zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', async e => {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      vaultFileData = new Uint8Array(await file.arrayBuffer());
+      vaultFileHandle = null; // a dropped File has no writable handle
+      showUnlockCard(file.name);
+    });
+  }
+});
+
+// ── File pick ──────────────────────────────────────────────────────
+async function pickVaultFile() {
+  try {
+    if ('showOpenFilePicker' in window) {
+      const [h] = await window.showOpenFilePicker({
+        types:[{description:'Fob Vault',accept:{'application/octet-stream':['.fob']}}],
+      });
+      const file = await h.getFile();
+      vaultFileData = new Uint8Array(await file.arrayBuffer());
+      vaultFileHandle = h; // keep it — this is what lets a duress wipe reach the real file
+      showUnlockCard(file.name);
+    } else {
+      const inp = Object.assign(document.createElement('input'),{type:'file',accept:'.fob'});
+      await new Promise(res => { inp.onchange = res; inp.click(); });
+      if (!inp.files[0]) return;
+      vaultFileData = new Uint8Array(await inp.files[0].arrayBuffer());
+      vaultFileHandle = null; // a plain file input never gives a writable handle
+      showUnlockCard(inp.files[0].name);
+    }
+  } catch(e) {
+    if (e.name !== 'AbortError') document.getElementById('pick-err').textContent = e.message;
+  }
+}
+
+async function importVault() {
+  const prev = vaultFileData;
+  vaultFileData = null;
+  await pickVaultFile();
+  if (!vaultFileData) { vaultFileData = prev; return; }
+  toast('Vault imported. Enter your passphrase to unlock.', 'ok');
+  doLock();
+  showUnlockCard();
+}
+
+async function exportToUSB() {
+  if (!vaultFileData) return;
+  const blob = new Blob([vaultFileData],{type:'application/octet-stream'});
+  if ('showSaveFilePicker' in window) {
+    try {
+      const h = await window.showSaveFilePicker({suggestedName:'vault.fob',types:[{description:'Fob Vault',accept:{'application/octet-stream':['.fob']}}]});
+      const w = await h.createWritable(); await w.write(blob); await w.close();
+      toast('Exported to USB.', 'ok'); return;
+    } catch(e) { if (e.name==='AbortError') return; }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'),{href:url,download:'vault.fob'});
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),60_000);
+  toast('vault.fob downloaded.', 'ok');
+}
+
+// ── Persistence — silent save to IDB ──────────────────────────────
+async function writeVaultBack(newBytes) {
+  vaultFileData = newBytes;
+  await _saveVaultBytes(newBytes);
+}
+
+// ── UI transitions ─────────────────────────────────────────────────
+function _showCard(id) {
+  ['card-pick','card-unlock','card-create'].forEach(cid => {
+    document.getElementById(cid).style.display = (cid === id) ? 'flex' : 'none';
+  });
+}
+function showPickCard() {
+  _showCard('card-pick');
+}
+function showUnlockCard(name) {
+  _showCard('card-unlock');
+  const hint = document.getElementById('unlock-vault-hint');
+  hint.textContent = name || 'Saved in browser';
+  setTimeout(() => document.getElementById('passphrase').focus(), 50);
+}
+function showCreateCard() {
+  _showCard('card-create');
+  const panel = document.getElementById('create-advanced');
+  panel.classList.remove('open');
+  document.querySelector('.advanced-toggle').setAttribute('aria-expanded', 'false');
+  setTimeout(() => document.getElementById('create-pass').focus(), 50);
+}
+
+function toggleAdvanced(btn) {
+  const panel = document.getElementById('create-advanced');
+  const open = panel.classList.toggle('open');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function togglePassVis() {
+  const inp = document.getElementById('passphrase');
+  const ico = document.getElementById('eye-icon');
+  if (inp.type==='password') {
+    inp.type = 'text';
+    ico.innerHTML = `<path d="M2 2l12 12"/><path d="M8.8 3.2A7 7 0 018 3C4 3 1 8 1 8s.9 1.6 2.4 2.9"/><path d="M11.2 5A7 7 0 0115 8s-3 5-7 5a7 7 0 01-2.5-.5"/>`;
+  } else {
+    inp.type = 'password';
+    ico.innerHTML = `<path d="M1 8C1 8 4 3.5 8 3.5s7 4.5 7 4.5-3 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/>`;
+  }
+}
+
+// ── Unlock ─────────────────────────────────────────────────────────
+async function doUnlock() {
+  const inp   = document.getElementById('passphrase');
+  const errEl = document.getElementById('unlock-err');
+  const btn   = document.getElementById('unlock-btn');
+  errEl.textContent = ''; inp.classList.remove('error');
+  if (!inp.value) { errEl.textContent = 'Enter your passphrase.'; return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Unlocking…';
+  try {
+    vaultPassphrase = new TextEncoder().encode(inp.value);
+    const result = await vaultUnlock(vaultFileData, vaultPassphrase);
+    if (result.slot === SLOT_DURESS) {
+      // Duress passphrase: destroy the actual file on disk (if we have a
+      // writable handle to it) plus our IndexedDB cache, and report the
+      // exact same error as a wrong passphrase — the wipe must be silent.
+      await wipeVaultFile();
+      await _clearVaultBytes();
+      vaultFileData = null;
+      vaultPassphrase.fill(0); vaultPassphrase = null;
+      throw new Error('Wrong passphrase');
+    }
+    vaultJSON = result.json;
+    vaultSlot = result.slot;
+    inp.value = '';
+    await _saveVaultBytes(vaultFileData); // ensure IDB is up to date
+    enterVault();
+  } catch(e) {
+    errEl.textContent = e.message === 'Wrong passphrase' ? 'Incorrect passphrase.' : `Error: ${e.message}`;
+    inp.classList.add('error'); inp.focus();
+    if (vaultPassphrase) { vaultPassphrase.fill(0); vaultPassphrase = null; }
+  } finally {
+    btn.disabled = false; btn.innerHTML = 'Unlock Vault';
+  }
+}
+
+async function doCreateVault() {
+  const p1 = document.getElementById('create-pass');
+  const p2 = document.getElementById('create-pass2');
+  const decoyEl  = document.getElementById('create-decoy-pass');
+  const duressEl = document.getElementById('create-duress-pass');
+  const errEl = document.getElementById('create-err');
+  const btn   = document.getElementById('create-btn');
+  errEl.textContent = '';
+  const decoyPass  = decoyEl.value  || null;
+  const duressPass = duressEl.value || null;
+  if (!p1.value) { errEl.textContent = 'Enter a passphrase.'; p1.focus(); return; }
+  if (p1.value.length < 8) { errEl.textContent = 'Passphrase must be at least 8 characters.'; p1.focus(); return; }
+  if (p1.value !== p2.value) { errEl.textContent = 'Passphrases do not match.'; p2.focus(); return; }
+  if (decoyPass && decoyPass === p1.value) { errEl.textContent = 'Decoy passphrase must differ from your main passphrase.'; decoyEl.focus(); return; }
+  if (duressPass && duressPass === p1.value) { errEl.textContent = 'Duress passphrase must differ from your main passphrase.'; duressEl.focus(); return; }
+  if (decoyPass && duressPass && decoyPass === duressPass) { errEl.textContent = 'Decoy and duress passphrases must differ.'; duressEl.focus(); return; }
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating…';
+  try {
+    vaultFileData   = await createVaultBytes(p1.value, decoyPass, duressPass);
+    vaultPassphrase = new TextEncoder().encode(p1.value);
+    const result    = await vaultUnlock(vaultFileData, vaultPassphrase);
+    vaultJSON = result.json;
+    vaultSlot = result.slot;
+    p1.value = ''; p2.value = ''; decoyEl.value = ''; duressEl.value = '';
+    await _saveVaultBytes(vaultFileData);
+    enterVault();
+    toast('New vault created. Don\'t forget to export a backup to USB!', 'ok');
+  } catch(e) {
+    errEl.textContent = `Error: ${e.message}`;
+  } finally {
+    btn.disabled = false; btn.innerHTML = 'Create Vault';
+  }
+}
+
+function enterVault() {
+  document.getElementById('lock-screen').style.display = 'none';
+  document.getElementById('vault-ui').style.display    = 'flex';
+  const fp = vaultJSON.fingerprint || '';
+  document.getElementById('tb-fp').textContent      = fp ? `FP: ${fp}` : '';
+  document.getElementById('tb-badge').className     = 'topbar-badge';
+  document.getElementById('tb-version').textContent = `v${VERSION}`;
+  startClock();
+  resetLockTimer();
+  switchView('passwords');
+}
+
+function doLock() {
+  clearTimeout(lockTimer); lockTimer = null;
+  if (vaultPassphrase) { vaultPassphrase.fill(0); vaultPassphrase = null; }
+  vaultJSON = null; vaultSlot = 0; selectedIdx = -1;
+  stopTotpTimer();
+  if (clipClearTimer) { clearTimeout(clipClearTimer); clipClearTimer = null; }
+  navigator.clipboard.writeText('').catch(()=>{});
+  closeModal();
+  closeConfirm(false);
+
+  // "Locked" must mean locked — clear every place decrypted data was ever
+  // rendered or cached, not just the vaultJSON reference. Otherwise
+  // passwords/notes/keys shown before lock stay readable via DevTools even
+  // with the vault UI hidden.
+  document.getElementById('entry-list').innerHTML  = '';
+  document.getElementById('detail-panel').innerHTML = '';
+  document.getElementById('totp-panel').innerHTML  = '';
+  document.getElementById('modal-fields').innerHTML = '';
+  Object.keys(_dc).forEach(k => delete _dc[k]);
+  Object.keys(_totpMap).forEach(k => delete _totpMap[k]);
+  _dcn = 0;
+
+  document.getElementById('vault-ui').style.display    = 'none';
+  document.getElementById('lock-screen').style.display = 'flex';
+  // Show passphrase card if we have a vault, otherwise picker
+  if (vaultFileData) showUnlockCard(); else showPickCard();
+}
+
+function doLockClose() { doLock(); try { window.close(); } catch(_){} }
+
+// ── View management ────────────────────────────────────────────────
+const viewMeta = {
+  passwords: { title:'Passwords',  icon:IC.key,      field:'passwords', hasGrid:false },
+  totp:      { title:'Two-Factor', icon:IC.clock,    field:'totp',      hasGrid:true  },
+  ssh:       { title:'SSH Keys',   icon:IC.terminal, field:'ssh_keys',  hasGrid:false },
+  notes:     { title:'Notes',      icon:IC.note,     field:'notes',     hasGrid:false },
+};
+
+function switchView(view) {
+  currentView = view; selectedIdx = -1; searchQ = '';
+  document.getElementById('search').value = '';
+  stopTotpTimer();
+
+  document.querySelectorAll('.nav-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.view === view)
+  );
+  document.getElementById('view-title').textContent = viewMeta[view].title;
+
+  const isTotpGrid = viewMeta[view].hasGrid;
+  document.getElementById('entry-list').style.display   = isTotpGrid ? 'none' : '';
+  document.getElementById('detail-panel').style.display = isTotpGrid ? 'none' : 'flex';
+  document.getElementById('totp-panel').style.display   = isTotpGrid ? 'flex' : 'none';
+  document.getElementById('search-wrap').style.display  = isTotpGrid ? 'none' : '';
+
+  if (isTotpGrid) {
+    renderTotpGrid();
+  } else {
+    renderList();
+    document.getElementById('detail-panel').innerHTML = `
+      <div class="detail-empty">
+        <div class="detail-empty-icon">${viewMeta[view].icon}</div>
+        <span>Select an entry to view details</span>
+      </div>`;
+  }
+}
+
+function getItems() {
+  if (!vaultJSON) return [];
+  const all = vaultJSON[viewMeta[currentView].field] || [];
+  if (!searchQ) return all;
+  const q = searchQ.toLowerCase();
+  return all.filter(it => Object.values(it).some(v => typeof v==='string' && v.toLowerCase().includes(q)));
+}
+
+function updateCounts() {
+  document.getElementById('cnt-pw').textContent    = (vaultJSON?.passwords||[]).length;
+  document.getElementById('cnt-totp').textContent  = (vaultJSON?.totp||[]).length;
+  document.getElementById('cnt-ssh').textContent   = (vaultJSON?.ssh_keys||[]).length;
+  document.getElementById('cnt-notes').textContent = (vaultJSON?.notes||[]).length;
+}
+
+function onSearch() {
+  searchQ = document.getElementById('search').value.trim();
+  selectedIdx = -1; renderList();
+}
+
+// ── Entry list ─────────────────────────────────────────────────────
+function renderList() {
+  const list  = document.getElementById('entry-list');
+  const items = getItems();
+  document.getElementById('view-count').textContent = `${items.length} ${items.length===1?'item':'items'}`;
+  updateCounts();
+
+  if (!items.length) {
+    const label = viewMeta[currentView].title.toLowerCase();
+    list.innerHTML = `<div class="entry-empty">
+      <div class="entry-empty-icon">${viewMeta[currentView].icon}</div>
+      <div>No ${label} yet.<br><strong style="color:var(--text-2)">+ Add</strong> one above.</div>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = items.map((item, i) => {
+    let name='', sub='', label='';
+    if (currentView==='passwords') {
+      name = item.name; label = item.name;
+      sub = item.url ? item.url.replace(/^https?:\/\/(www\.)?/,'').split('/')[0] : (item.username||'');
+    } else if (currentView==='ssh') {
+      name = item.name; label = item.name;
+      sub = item.algorithm || 'SSH Key';
+    } else if (currentView==='notes') {
+      name = item.title; label = item.title;
+      sub = item.body ? item.body.replace(/\s+/g,' ').slice(0,40) : fmtDate(item.modified);
+    }
+    const color = avatarColor(label);
+    return `<div class="entry-item${i===selectedIdx?' selected':''}" data-select-idx="${i}" style="animation:fadeInUp .26s ease both;animation-delay:${Math.min(i,10)*20}ms">
+      <div class="entry-avatar" style="background:${color}">${avatarLetter(label)}</div>
+      <div class="entry-text">
+        <div class="entry-name">${esc(name)}</div>
+        <div class="entry-sub">${esc(sub)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectEntry(i) {
+  selectedIdx = i; renderList();
+  const item = getItems()[i];
+  if (item) renderDetail(item, i);
+}
+
+// ── TOTP grid ──────────────────────────────────────────────────────
+function renderTotpGrid() {
+  const panel = document.getElementById('totp-panel');
+  const items = vaultJSON?.[viewMeta.totp.field] || [];
+  document.getElementById('view-count').textContent = `${items.length} ${items.length===1?'item':'items'}`;
+  updateCounts();
+
+  if (!items.length) {
+    panel.innerHTML = `<div class="entry-empty" style="height:100%;justify-content:center">
+      <div class="entry-empty-icon">${IC.clock}</div>
+      <div>No two-factor accounts yet.<br>Click <strong style="color:var(--text-2)">+ Add</strong> to add one.</div>
+    </div>`;
+    return;
+  }
+
+  items.forEach(t => { _totpMap[t.id] = { secret:t.secret, period:t.period||30, digits:t.digits||6 }; });
+
+  panel.innerHTML = `<div class="totp-grid">${items.map((t,i) => {
+    const color = avatarColor(t.issuer);
+    return `<div class="totp-card" style="animation:fadeInUp .26s ease both;animation-delay:${Math.min(i,10)*20}ms">
+      <div class="totp-card-head">
+        <div class="entry-avatar" style="background:${color};width:40px;height:40px;border-radius:11px;font-size:16px">${avatarLetter(t.issuer)}</div>
+        <div class="totp-card-info">
+          <div class="totp-card-name">${esc(t.issuer)}</div>
+          <div class="totp-card-account">${esc(t.account)}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="padding:5px 8px;opacity:.7" data-edit-type="totp" data-edit-id="${esc(t.id)}">${IC.pencil}</button>
+        <button class="btn btn-danger btn-sm" style="padding:5px 8px;opacity:.7" data-delete-type="totp" data-delete-id="${esc(t.id)}" data-delete-idx="${i}">${IC.trash}</button>
+      </div>
+      <div class="totp-code-wrap">
+        <div class="totp-code" id="tc-${esc(t.id)}">— — —</div>
+      </div>
+      <div class="totp-bar"><div class="totp-fill" id="tf-${esc(t.id)}"></div></div>
+      <div class="totp-foot">
+        <span class="totp-secs" id="ts-${esc(t.id)}"></span>
+        <button class="copy-btn" data-copy-totp="${esc(t.id)}">${IC.copy} Copy code</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+
+  startTotpTimer();
+}
+
+async function refreshTotpEntry(t) {
+  const el  = document.getElementById(`tc-${t.id}`);
+  const bar = document.getElementById(`tf-${t.id}`);
+  const sec = document.getElementById(`ts-${t.id}`);
+  if (!el) return;
+  try {
+    const code = await totp(t.secret, t.period||30, t.digits||6);
+    const secs = totpSecsLeft(t.period||30);
+    const pct  = (secs/(t.period||30))*100;
+    el.textContent   = code.replace(/(.{3})(.{3})/,'$1 $2');
+    el.className     = `totp-code${secs<=5?' crit':secs<=10?' warn':''}`;
+    if (bar) { bar.style.width=`${pct}%`; bar.className=`totp-fill${secs<=5?' crit':secs<=10?' warn':''}`; }
+    if (sec) sec.textContent = `${secs}s`;
+  } catch { if (el) el.textContent = 'Error'; }
+}
+
+function startTotpTimer() {
+  stopTotpTimer();
+  const tick = async () => {
+    if (currentView !== 'totp') return;
+    for (const t of (vaultJSON?.totp||[])) await refreshTotpEntry(t);
+  };
+  tick();
+  totpTimer = setInterval(tick, 1000);
+}
+function stopTotpTimer() { if (totpTimer) { clearInterval(totpTimer); totpTimer = null; } }
+
+// ── Detail panels ──────────────────────────────────────────────────
+document.addEventListener('click', e => {
+  const cb = e.target.closest('[data-copy]');
+  if (cb) { copyText(_dc[cb.dataset.copy]||'', cb); return; }
+
+  const rb = e.target.closest('[data-reveal]');
+  if (rb) {
+    const el    = document.getElementById(rb.dataset.reveal);
+    const plain = _dc[rb.dataset.plain]||'';
+    if (!el) return;
+    if (rb.dataset.showing==='1') {
+      el.textContent='•'.repeat(Math.min(plain.length,16));
+      el.classList.add('mono');
+      rb.innerHTML=IC.eye+' Show';
+      rb.dataset.showing='0';
+    } else {
+      el.textContent=plain;
+      el.classList.add('mono');
+      rb.innerHTML=IC.eyeOff+' Hide';
+      rb.dataset.showing='1';
+    }
+    return;
+  }
+
+  const tb = e.target.closest('[data-copy-totp]');
+  if (tb) {
+    const meta = _totpMap[tb.dataset.copyTotp];
+    if (meta) totp(meta.secret,meta.period,meta.digits).then(c=>copyText(c,tb)).catch(e=>toast(e.message,'err'));
+  }
+});
+
+function renderDetail(item, i) {
+  if (currentView==='passwords') renderPwDetail(item,i);
+  else if (currentView==='ssh')  renderSshDetail(item,i);
+  else if (currentView==='notes')renderNoteDetail(item,i);
+}
+
+function dField(label, value, secret=false) {
+  const ck = 'k'+(_dcn++); const pk = 'p'+(_dcn++); const fid = 'f'+(_dcn++);
+  _dc[ck]=value; _dc[pk]=value;
+  const dots = '●'.repeat(Math.min(value.length, 20));
+  const display = secret ? dots : esc(value);
+  return `<div class="detail-field">
+    <div class="detail-field-label">${label}</div>
+    <div class="detail-field-row">
+      <div class="detail-field-value${secret?' masked':''}" id="${fid}">${display}</div>
+      ${secret?`<button class="reveal-btn" data-reveal="${fid}" data-plain="${pk}" data-showing="0">${IC.eye} Show</button>`:''}
+      <button class="copy-btn" data-copy="${ck}">${IC.copy} Copy</button>
+    </div>
+  </div>`;
+}
+
+function renderPwDetail(p, i) {
+  const color = avatarColor(p.name);
+  const urlDomain = p.url ? p.url.replace(/^https?:\/\/(www\.)?/,'').split('/')[0] : '';
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-header" style="animation:fadeIn .18s ease">
+      <div class="detail-avatar" style="background:${color}">${avatarLetter(p.name)}</div>
+      <div class="detail-hinfo">
+        <div class="detail-title">${esc(p.name)}</div>
+        ${urlDomain ? `<div class="detail-subtitle">${esc(urlDomain)}</div>` : ''}
+      </div>
+    </div>
+    ${dField('Username / Email', p.username)}
+    ${dField('Password', p.password, true)}
+    ${p.url ? `<div class="detail-field">
+      <div class="detail-field-label">Website</div>
+      <div class="detail-field-row">
+        <a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer" class="detail-url-link">${esc(p.url)}</a>
+        <button class="copy-btn" style="padding:8px 11px" title="Copy URL" data-copy="${(()=>{const k='k'+(_dcn++);_dc[k]=p.url;return k;})()}">${IC.copy}</button>
+      </div>
+    </div>` : ''}
+    ${p.notes ? `<div class="detail-field">
+      <div class="detail-field-label">Notes</div>
+      <textarea class="detail-field-textarea" rows="3" readonly>${esc(p.notes)}</textarea>
+    </div>` : ''}
+    <div class="detail-meta">
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">Created</span>
+        <span class="detail-meta-val">${fmtDate(p.created)}</span>
+      </div>
+      ${p.modified && p.modified !== p.created ? `<div class="detail-meta-item">
+        <span class="detail-meta-label">Modified</span>
+        <span class="detail-meta-val">${fmtDate(p.modified)}</span>
+      </div>` : ''}
+    </div>
+    <div class="danger-zone">
+      <button class="btn btn-ghost btn-sm" data-edit-type="passwords" data-edit-id="${esc(p.id)}">${IC.pencil} Edit</button>
+      <button class="btn btn-danger btn-sm" data-delete-type="passwords" data-delete-id="${esc(p.id)}" data-delete-idx="${i}">${IC.trash} Delete entry</button>
+    </div>`;
+}
+
+function renderSshDetail(k, i) {
+  const color = avatarColor(k.name);
+  const ck = 'k'+(_dcn++); _dc[ck] = k.public_key||'';
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-header" style="animation:fadeIn .18s ease">
+      <div class="detail-avatar" style="background:${color}">${avatarLetter(k.name)}</div>
+      <div class="detail-hinfo">
+        <div class="detail-title">${esc(k.name)}</div>
+        <div class="detail-subtitle">${esc(k.algorithm||'SSH Key')}</div>
+      </div>
+    </div>
+    ${k.fingerprint ? dField('Fingerprint', k.fingerprint) : ''}
+    <div class="detail-field">
+      <div class="detail-field-label">Public Key</div>
+      <textarea class="detail-field-textarea" rows="5" readonly style="font-family:var(--mono);font-size:11.5px;line-height:1.6">${esc(k.public_key||'')}</textarea>
+      <div style="margin-top:8px">
+        <button class="copy-btn" data-copy="${ck}">${IC.copy} Copy public key</button>
+      </div>
+    </div>
+    <div class="detail-meta">
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">Added</span>
+        <span class="detail-meta-val">${fmtDate(k.created)}</span>
+      </div>
+    </div>
+    <div class="danger-zone">
+      <button class="btn btn-ghost btn-sm" data-edit-type="ssh_keys" data-edit-id="${esc(k.id)}">${IC.pencil} Edit</button>
+      <button class="btn btn-danger btn-sm" data-delete-type="ssh_keys" data-delete-id="${esc(k.id)}" data-delete-idx="${i}">${IC.trash} Delete key</button>
+    </div>`;
+}
+
+function renderNoteDetail(n, i) {
+  const color = avatarColor(n.title);
+  const ck = 'k'+(_dcn++); _dc[ck]=n.body;
+  document.getElementById('detail-panel').innerHTML = `
+    <div class="detail-header" style="animation:fadeIn .18s ease">
+      <div class="detail-avatar" style="background:${color}">${avatarLetter(n.title)}</div>
+      <div class="detail-hinfo">
+        <div class="detail-title">${esc(n.title)}</div>
+        <div class="detail-subtitle">Secure Note</div>
+      </div>
+    </div>
+    <div class="detail-field">
+      <div class="detail-field-label">Content</div>
+      <textarea class="detail-field-textarea" rows="9" readonly>${esc(n.body)}</textarea>
+    </div>
+    <div style="margin-top:8px">
+      <button class="copy-btn" data-copy="${ck}">${IC.copy} Copy note</button>
+    </div>
+    <div class="detail-meta">
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">Created</span>
+        <span class="detail-meta-val">${fmtDate(n.created)}</span>
+      </div>
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">Modified</span>
+        <span class="detail-meta-val">${fmtDate(n.modified)}</span>
+      </div>
+    </div>
+    <div class="danger-zone">
+      <button class="btn btn-ghost btn-sm" data-edit-type="notes" data-edit-id="${esc(n.id)}">${IC.pencil} Edit</button>
+      <button class="btn btn-danger btn-sm" data-delete-type="notes" data-delete-id="${esc(n.id)}" data-delete-idx="${i}">${IC.trash} Delete note</button>
+    </div>`;
+}
+
+// ── Confirm modal ──────────────────────────────────────────────────
+let confirmResolve = null;
+function showConfirm(title, sub) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-sub').textContent   = sub||'This action cannot be undone.';
+  document.getElementById('confirm-modal').classList.add('open');
+  return new Promise(res => { confirmResolve = res; });
+}
+function closeConfirm(result) {
+  document.getElementById('confirm-modal').classList.remove('open');
+  if (confirmResolve) { confirmResolve(result); confirmResolve=null; }
+}
+
+// ── Delete ─────────────────────────────────────────────────────────
+async function deleteEntry(field, id, i) {
+  const ok = await showConfirm('Delete this entry?');
+  if (!ok) return;
+  vaultJSON[field] = (vaultJSON[field]||[]).filter(e=>e.id!==id);
+  vaultJSON.modified = nowSecs();
+  await persistVault();
+  selectedIdx = -1;
+  if (currentView==='totp') renderTotpGrid(); else { renderList(); switchView(currentView); }
+  toast('Entry deleted.', 'ok');
+}
+
+// ── Add modal ──────────────────────────────────────────────────────
+const modalDefs = {
+  passwords: {
+    title: 'Add Password',
+    fields: [
+      {id:'name',     label:'Name',            type:'text',     required:true},
+      {id:'username', label:'Username / Email', type:'text',     required:true},
+      {id:'password', label:'Password',         type:'password', required:true},
+      {id:'url',      label:'Website URL',      type:'url',      required:false},
+      {id:'notes',    label:'Notes',            type:'textarea', required:false},
+    ]
+  },
+  totp: {
+    title: 'Add Two-Factor (TOTP)',
+    fields: [
+      {id:'issuer',  label:'Service name',   type:'text', required:true},
+      {id:'account', label:'Account / Email',type:'text', required:true},
+      {id:'secret',  label:'Secret (base32)',type:'text', required:true},
+    ]
+  },
+  notes: {
+    title: 'Add Secure Note',
+    fields: [
+      {id:'title', label:'Title', type:'text',     required:true},
+      {id:'body',  label:'Note',  type:'textarea', required:true},
+    ]
+  },
+  ssh: {
+    title: 'Import SSH Key',
+    wide: true,
+    fields: [
+      {id:'name',        label:'Name',        type:'text',     required:true},
+      {id:'public_key',  label:'Public key',  type:'text',     required:true},
+      {id:'private_key', label:'Private key', type:'textarea', required:true, rows:12, mono:true},
+    ]
+  },
+};
+
+function openAddModal() {
+  editingEntry = null;
+  openEntryModal(modalDefs[currentView]?.title, {});
+}
+
+function openEditModal(field, id) {
+  const entry = (vaultJSON?.[field]||[]).find(e => e.id === id);
+  if (!entry) return;
+  editingEntry = { field, id };
+  const baseTitle = (modalDefs[currentView]?.title||'Entry').replace(/^Add /,'').replace(/^Import /,'');
+  openEntryModal(`Edit ${baseTitle}`, entry);
+}
+
+function openEntryModal(title, prefill) {
+  const def = modalDefs[currentView];
+  if (!def) return;
+  // Display value for a field. The stored TOTP secret is a raw byte array
+  // (Rust shape); the form edits it as base32, so decode for display.
+  const pval = f => {
+    if (f.id === 'secret' && (Array.isArray(prefill.secret) || prefill.secret instanceof Uint8Array)) {
+      return base32Encode(prefill.secret);
+    }
+    return prefill[f.id] || '';
+  };
+  document.getElementById('modal').classList.toggle('modal-wide', !!def.wide);
+  document.getElementById('modal-title').textContent = title || def.title;
+  document.getElementById('modal-err').textContent   = '';
+  document.getElementById('modal-fields').innerHTML  = def.fields.map(f=>`
+    <div class="field" style="margin-bottom:12px">
+      <label>${f.label}${f.required?'':' <span style="color:var(--text-3);font-weight:400;text-transform:none">(optional)</span>'}</label>
+      ${f.type==='textarea'
+        ?`<textarea id="mf-${f.id}" rows="${f.rows||4}" style="resize:vertical${f.mono?';font-family:var(--mono);font-size:12px;line-height:1.6':''}">${esc(pval(f))}</textarea>`
+        : f.id==='password'
+          ?`<div class="pass-wrap">
+              <input id="mf-${f.id}" type="password" autocomplete="off" value="${esc(pval(f))}"/>
+              <button type="button" class="pass-toggle accent" data-action="gen-password" title="Generate a strong password">${IC.refresh}</button>
+            </div>
+            <div class="pw-strength" id="mf-password-strength">${'<div class="pw-strength-seg"></div>'.repeat(4)}</div>
+            <div class="pw-strength-label" id="mf-password-strength-label"></div>`
+          :`<input id="mf-${f.id}" type="${f.type}" autocomplete="off" value="${esc(pval(f))}"/>`
+      }
+    </div>`).join('');
+  document.getElementById('add-modal').classList.add('open');
+  document.getElementById(`mf-${def.fields[0].id}`).focus();
+  updatePasswordStrength(document.getElementById('mf-password')?.value || '');
+}
+
+// Simple heuristic — length + character-class diversity. Not a substitute
+// for the entropy Fob's own generator already guarantees, just feedback
+// for passwords the user typed themselves.
+function scorePassword(pw) {
+  if (!pw) return 0;
+  let classes = 0;
+  if (/[a-z]/.test(pw)) classes++;
+  if (/[A-Z]/.test(pw)) classes++;
+  if (/[0-9]/.test(pw)) classes++;
+  if (/[^a-zA-Z0-9]/.test(pw)) classes++;
+  let score = 1;
+  if (pw.length >= 10) score++;
+  if (pw.length >= 16 && classes >= 3) score++;
+  if (pw.length >= 20 && classes >= 3) score++;
+  return Math.min(4, score);
+}
+function updatePasswordStrength(pw) {
+  const wrap  = document.getElementById('mf-password-strength');
+  const label = document.getElementById('mf-password-strength-label');
+  if (!wrap || !label) return;
+  const score = scorePassword(pw);
+  const segColors = ['var(--danger)','var(--warn)','var(--blue)','var(--ok)'];
+  const labels     = ['Weak','Fair','Good','Strong'];
+  wrap.querySelectorAll('.pw-strength-seg').forEach((seg, i) => {
+    seg.style.background = (score > 0 && i < score) ? segColors[score-1] : '';
+  });
+  label.textContent = score > 0 ? labels[score-1] : '';
+  label.style.color = score > 0 ? segColors[score-1] : '';
+}
+function fillGeneratedPassword() {
+  const el = document.getElementById('mf-password');
+  if (el) { el.value = generatePassword(20); el.type = 'text'; el.focus(); updatePasswordStrength(el.value); }
+}
+function closeModal() {
+  document.getElementById('add-modal').classList.remove('open');
+  editingEntry = null;
+}
+
+async function saveEntry() {
+  const def = modalDefs[currentView];
+  if (!def) return;
+  const errEl = document.getElementById('modal-err');
+  errEl.textContent = '';
+  const body = {};
+  for (const f of def.fields) {
+    const el  = document.getElementById(`mf-${f.id}`);
+    const val = el?.value?.trim();
+    if (f.required && !val) { errEl.textContent=`${f.label} is required.`; el?.focus(); return; }
+    body[f.id] = val||'';
+  }
+  if (currentView==='totp') {
+    // Store the secret as raw bytes + Rust's "Sha1" algorithm name so the
+    // saved JSON is byte-for-byte the shape fob-core's VaultBlob expects
+    // (see types.rs: TotpEntry.secret is SecretBytes, algorithm is
+    // "Sha1"/"Sha256"/"Sha512"). The form still inputs/exits base32.
+    try { base32Decode(body.secret); } catch { errEl.textContent='Invalid secret — must be base32.'; return; }
+    body.secret = Array.from(base32Decode(body.secret));
+    body.algorithm = 'Sha1';
+    try { await totp(body.secret); } catch(e) { errEl.textContent=`TOTP error: ${e.message}`; return; }
+  }
+  let sshFingerprintValue, sshAlgorithmValue;
+  if (currentView==='ssh') {
+    try { sshFingerprintValue = await sshFingerprint(body.public_key); }
+    catch(e) { errEl.textContent = e.message; return; }
+    sshAlgorithmValue = sshAlgorithm(body.public_key);
+  }
+  const btn = document.getElementById('modal-save');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Saving…';
+  const now=nowSecs();
+  const field = currentView==='ssh' ? 'ssh_keys' : currentView==='totp' ? 'totp' : currentView;
+  const editIdx = editingEntry ? (vaultJSON[field]||[]).findIndex(e => e.id === editingEntry.id) : -1;
+
+  if (editIdx !== -1) {
+    // Edit in place — keep id/created, only touch what the form covers.
+    const existing = vaultJSON[field][editIdx];
+    Object.assign(existing, body);
+    if (currentView==='ssh') { existing.fingerprint = sshFingerprintValue; existing.algorithm = sshAlgorithmValue; }
+    if ('modified' in existing) existing.modified = now;
+  } else {
+    const id = uuid();
+    if (currentView==='passwords') {
+      vaultJSON.passwords=(vaultJSON.passwords||[]);
+      vaultJSON.passwords.push({id,created:now,modified:now,...body});
+    } else if (currentView==='totp') {
+      vaultJSON.totp=(vaultJSON.totp||[]);
+      vaultJSON.totp.push({id,created:now,digits:6,period:30,...body});
+    } else if (currentView==='notes') {
+      vaultJSON.notes=(vaultJSON.notes||[]);
+      vaultJSON.notes.push({id,created:now,modified:now,...body});
+    } else if (currentView==='ssh') {
+      vaultJSON.ssh_keys=(vaultJSON.ssh_keys||[]);
+      vaultJSON.ssh_keys.push({id,created:now,fingerprint:sshFingerprintValue,algorithm:sshAlgorithmValue,...body});
+    }
+  }
+  vaultJSON.modified=now;
+  await persistVault();
+  btn.disabled=false; btn.innerHTML='Save entry';
+  closeModal();
+  if (currentView==='totp') renderTotpGrid(); else renderList();
+  toast('Entry saved.', 'ok');
+}
+
+// ── Persistence ────────────────────────────────────────────────────
+async function persistVault() {
+  try {
+    const newBytes = await vaultSave(vaultFileData, vaultPassphrase, vaultSlot, vaultJSON);
+    await writeVaultBack(newBytes);
+  } catch(e) { toast(`Save failed: ${e.message}`, 'err'); }
+}
+
+// ── Clipboard ──────────────────────────────────────────────────────
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    clearTimeout(clipClearTimer);
+    clipClearTimer = setTimeout(() => navigator.clipboard.writeText('').catch(()=>{}), 30_000);
+    toast('Copied · clears in 30s', 'ok');
+    if (!btn) return;
+    const orig = btn.innerHTML;
+    btn.classList.add('copied'); btn.innerHTML = IC.check+' Copied';
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML=orig; }, 2000);
+  }).catch(() => toast('Clipboard unavailable.','err'));
+}
+
+// ── Clock ──────────────────────────────────────────────────────────
+function startClock() {
+  const el = document.getElementById('tb-clock');
+  const t = () => { el.textContent = new Date().toISOString().split('.')[0]+'Z'; };
+  t(); setInterval(t, 1000);
+}
+
+// ── Toast ──────────────────────────────────────────────────────────
+let toastTimeout;
+function toast(msg, type='ok') {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className=`show ${type}`;
+  clearTimeout(toastTimeout);
+  toastTimeout=setTimeout(()=>{ el.className=''; }, 3500);
+}
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────
+const views = ['passwords','totp','ssh','notes'];
+document.addEventListener('keydown', e => {
+  if (document.getElementById('confirm-modal').classList.contains('open')) {
+    if (e.key==='Escape') closeConfirm(false);
+    if (e.key==='Enter')  closeConfirm(true);
+    return;
+  }
+  if (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
+  if (document.getElementById('add-modal').classList.contains('open')) {
+    if (e.key==='Escape') closeModal(); return;
+  }
+  if (document.getElementById('vault-ui').style.display==='none') {
+    if (e.key==='Enter') document.getElementById('passphrase')?.focus();
+    return;
+  }
+  const items = currentView==='totp' ? [] : getItems();
+  switch(e.key) {
+    case 'j': case 'ArrowDown':
+      e.preventDefault();
+      if (items.length) { selectedIdx=Math.min(selectedIdx+1,items.length-1); renderList(); if(selectedIdx>=0)renderDetail(items[selectedIdx],selectedIdx); }
+      break;
+    case 'k': case 'ArrowUp':
+      e.preventDefault();
+      if (items.length) { selectedIdx=Math.max(selectedIdx-1,0); renderList(); renderDetail(items[selectedIdx],selectedIdx); }
+      break;
+    case 'J': switchView(views[(views.indexOf(currentView)+1)%views.length]); break;
+    case 'K': switchView(views[(views.indexOf(currentView)-1+views.length)%views.length]); break;
+    case 'a': openAddModal(); break;
+    case 'l': doLock(); break;
+    case 'e': exportToUSB(); break;
+    case '/': e.preventDefault(); document.getElementById('search').focus(); break;
+    case 'Escape': document.getElementById('search').blur(); break;
+  }
+});
+document.getElementById('passphrase')?.addEventListener('keydown', e => { if(e.key==='Enter') doUnlock(); });
+document.getElementById('create-pass2')?.addEventListener('keydown', e => { if(e.key==='Enter') doCreateVault(); });
+
+// ── Helpers ────────────────────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function nowSecs() { return Math.floor(Date.now()/1000); }
+function fmtDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'});
+}
+function fmtDateTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) + ' · ' +
+         d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+function uuid() { return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)); }
+</script>
+</body>
+</html>

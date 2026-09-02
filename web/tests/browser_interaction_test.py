@@ -226,6 +226,25 @@ async def add_totp(cdp, issuer, account, secret):
     await asyncio.sleep(0.3)
 
 
+async def lock_vault(cdp):
+    """Click the sidebar lock action and wait for the lock screen to show."""
+    await click(cdp, '[data-action="lock"]')
+    await asyncio.sleep(0.3)
+
+
+async def unlock_vault(cdp, passphrase=PASSPHRASE):
+    """Drive the unlock card: type the passphrase, submit, wait for vault UI."""
+    await set_value(cdp, "passphrase", passphrase)
+    await click(cdp, '[data-action="unlock"]')
+    await asyncio.sleep(0.6)
+    err = await cdp.eval("document.getElementById('unlock-err').textContent")
+    if err:
+        raise RuntimeError(f"unlock failed: {err}")
+    display = await cdp.eval("getComputedStyle(document.getElementById('vault-ui')).display")
+    if display == "none":
+        raise RuntimeError("vault-ui did not become visible after unlock")
+
+
 # ── Individual checks — each returns (ok: bool, detail: str) ────────────────
 
 
@@ -401,11 +420,76 @@ async def check_autolock_timeout(chrome):
         await cdp.close()
 
 
+async def check_v4_roundtrip(chrome):
+    """Prove a v4 (Argon2id) vault fully round-trips IN THE BROWSER: create it
+    through the real UI, confirm the header says format v4 / Argon2id, add a
+    password + a TOTP, lock, re-unlock, and confirm both entries persisted.
+    This is the core Phase B/E guarantee — the browser runs fob-core's Rust
+    crypto (embedded WASM), so what it writes is byte-compatible with the CLI."""
+    cdp = await chrome.open_page()
+    try:
+        await create_vault(cdp)
+
+        # The header must report format v4 + Argon2id — i.e. the WASM (Rust)
+        # create path, not the old WebCrypto v3/PBKDF2 path.
+        hdr = await cdp.eval(
+            "(function(){ var h = FobWasm.parse_header(vaultFileData); return JSON.stringify(h); })()"
+        )
+        hdr = json.loads(hdr)
+        if hdr["formatVersion"] != 4:
+            return False, f"expected formatVersion 4 (Argon2id), got {hdr['formatVersion']}"
+        if hdr["kdfAlgorithm"] != "Argon2id":
+            return False, f"expected Argon2id KDF, got {hdr['kdfAlgorithm']}"
+        if not hdr["fingerprint"]:
+            return False, "header fingerprint should be non-empty"
+
+        await add_password(cdp, "Vault Roundtrip", "alice", "roundtrip-pw")
+        await add_totp(cdp, "RT Co", "bob@example.com", "JBSWY3DPEHPK3PXP")
+
+        # Lock then re-unlock with the same passphrase — entry data must
+        # survive the full encrypt→persist→decrypt cycle through WASM.
+        await lock_vault(cdp)
+        await unlock_vault(cdp)
+
+        pws = await cdp.eval("vaultJSON.passwords.length")
+        totps = await cdp.eval("vaultJSON.totp.length")
+        if pws != 1 or totps != 1:
+            return False, f"after re-unlock expected 1 password & 1 TOTP, got {pws} & {totps}"
+
+        # TOTP secret must have come back as the raw byte array (Rust shape),
+        # and algorithm as "Sha1", so a subsequent save stays interop-clean.
+        secret = await cdp.eval("vaultJSON.totp[0].secret")
+        algo = await cdp.eval("vaultJSON.totp[0].algorithm")
+        if not isinstance(secret, list) or not all(isinstance(b, int) and 0 <= b <= 255 for b in secret):
+            return False, f"TOTP secret should be a raw byte array after unlock, got {secret!r}"
+        if algo != "Sha1":
+            return False, f"TOTP algorithm should be 'Sha1', got {algo!r}"
+
+        # Editing that TOTP and saving must produce a still-valid vault that
+        # re-unlocks — catches the base32↔bytes boundary being lossy.
+        await click(cdp, '.nav-item[data-view="totp"]')
+        await asyncio.sleep(0.1)
+        await click(cdp, '[data-edit-type="totp"]')
+        await asyncio.sleep(0.1)
+        await click(cdp, '[data-action="save-entry"]')
+        await asyncio.sleep(0.3)
+        await lock_vault(cdp)
+        await unlock_vault(cdp)
+        totps_after = await cdp.eval("vaultJSON.totp.length")
+        if totps_after != 1:
+            return False, f"after edit+relock, expected 1 TOTP, got {totps_after}"
+
+        return True, "v4 Argon2id vault created, entries saved, locked/re-unlocked in-browser, TOTP bytes round-trip"
+    finally:
+        await cdp.close()
+
+
 CHECKS = [
     ("search filtering", check_search_filtering),
     ("TOTP countdown display", check_totp_countdown),
     ("entry list rendering/scrolling with many entries", check_many_entries_rendering),
     ("auto-lock after inactivity timeout", check_autolock_timeout),
+    ("v4 Argon2id vault round-trips in-browser", check_v4_roundtrip),
 ]
 
 

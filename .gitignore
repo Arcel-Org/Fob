@@ -7,3 +7,7 @@ __pycache__/
 .cargo-home/
 # Generated wasm-bindgen glue — rebuilt from crates/fob-wasm
 web/wasm-out/
+# Intermediate bundle + wasm-bindgen scratch dirs — rebuilt by web/build_wasm.sh
+web/fob-wasm.js
+web/wasm-nomod/
+web/wasm-tmp/
