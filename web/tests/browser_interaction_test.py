@@ -334,6 +334,19 @@ async def check_search_filtering(chrome):
         if restored != 3:
             return False, f"clearing search should restore all 3 entries, saw {restored}"
 
+        # The ✕ clear button appears while typing and restores everything.
+        await set_value(cdp, "search", "amazon")
+        await asyncio.sleep(0.2)
+        has_text = await cdp.eval("document.getElementById('search-wrap').classList.contains('has-text')")
+        if not has_text:
+            return False, "search-wrap should show the clear button while typing"
+        await click(cdp, '#search-clear')
+        await asyncio.sleep(0.2)
+        cleared = await cdp.eval("document.getElementById('entry-list').children.length")
+        cleared_input = await cdp.eval("document.getElementById('search').value")
+        if cleared != 3 or cleared_input != "":
+            return False, f"✕ clear should restore 3 entries and empty the input, saw {cleared}/{cleared_input!r}"
+
         # A query matching nothing shows the empty state, not a stale list.
         await set_value(cdp, "search", "doesnotexist")
         await asyncio.sleep(0.2)
@@ -341,7 +354,7 @@ async def check_search_filtering(chrome):
         if not empty_shown:
             return False, "a non-matching search should render the empty-state message"
 
-        return True, "filters to matching entries, restores on clear, empty state on no match"
+        return True, "filters to matching entries, restores on clear + ✕ button, empty state on no match"
     finally:
         await cdp.close()
 
