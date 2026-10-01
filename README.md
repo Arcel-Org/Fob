@@ -176,7 +176,7 @@ fob/
 │   ├── index.html          # generated self-contained browser vault (shipped to USB)
 │   ├── build_wasm.sh       # compile fob-wasm → inline into index.html / inspector
 │   └── tests/              # headless-chromium interaction checks for index.html
-└── docs/               # testing guides and (optionally) README screenshots
+└── USABILITY_TESTING.md, HARDWARE_TESTING.md, CHANGELOG.md  # guides & changelog at repo root
 ```
 
 The `fob` command is intentionally small: it only installs/updates and does
