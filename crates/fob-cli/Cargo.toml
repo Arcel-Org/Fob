@@ -3,6 +3,8 @@ name = "fob-cli"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
 description = "Fob USB device manager — install/format/status/recover only"
 default-run = "fob"
 

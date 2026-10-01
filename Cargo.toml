@@ -51,8 +51,8 @@ base32 = { version = "0.5" }
 arboard = { version = "3" }
 
 # Internal crates
-fob-core = { path = "crates/fob-core" }
-fob-host = { path = "crates/fob-host" }
+fob-core = { path = "crates/fob-core", version = "0.1.0" }
+fob-host = { path = "crates/fob-host", version = "0.1.0" }
 
 [profile.release]
 opt-level = 3

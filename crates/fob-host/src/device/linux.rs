@@ -1,6 +1,8 @@
 use std::path::PathBuf;
+#[cfg(target_os = "linux")]
 use std::process::Command;
 
+#[cfg(target_os = "linux")]
 use super::UsbDevice;
 
 /// Is this `/sys/block` entry name likely the system's primary disk? Purely

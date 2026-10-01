@@ -3,6 +3,8 @@ name = "fob-wasm"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
 description = "Browser (WASM) bindings for fob-core — one crypto implementation, compiled for the web"
 publish = false
 

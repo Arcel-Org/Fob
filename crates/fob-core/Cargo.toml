@@ -3,6 +3,8 @@ name = "fob-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
 description = "Core cryptography and vault format for Fob — no I/O, pure logic"
 
 [dependencies]
