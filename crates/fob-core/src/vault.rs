@@ -14,7 +14,9 @@ use crate::{
         HEADER_SALT_OFFSET, HEADER_SIZE, MAX_VAULT_SIZE, MIN_VAULT_SIZE, RECOVERY_SLOT_INDEX,
     },
     kdf, recovery,
-    types::{CardEntry, FileEntry, NoteEntry, PasswordEntry, RecoveryCodeEntry, SshKeyEntry, TotpEntry},
+    types::{
+        CardEntry, FileEntry, NoteEntry, PasswordEntry, RecoveryCodeEntry, SshKeyEntry, TotpEntry,
+    },
 };
 
 /// KDF choice and parameters for a vault, used both at creation
@@ -787,10 +789,7 @@ mod tests {
         assert_eq!(parsed.files.len(), 1);
         assert_eq!(parsed.files[0].name, "secret.txt");
         assert_eq!(parsed.files[0].size, 11);
-        assert_eq!(
-            parsed.files[0].data,
-            B64.encode(b"hello world")
-        );
+        assert_eq!(parsed.files[0].data, B64.encode(b"hello world"));
         assert_eq!(parsed.cards.len(), 1);
         assert_eq!(parsed.cards[0].number.expose(), "4111111111111111");
         assert_eq!(parsed.cards[0].cvv.expose(), "123");

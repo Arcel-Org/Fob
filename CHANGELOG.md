@@ -5,8 +5,6 @@ land between releases. This file records what changed in each release.
 
 ## [Unreleased]
 
-## [Unreleased]
-
 ### Added
 
 - **Vault sections: Files, Cards, Recovery Codes** — three new encrypted
