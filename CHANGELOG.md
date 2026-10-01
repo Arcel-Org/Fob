@@ -3,11 +3,13 @@
 Fob is pre-1.0 (`0.1.x`) and under active development: breaking changes may
 land between releases. This file records what changed in each release.
 
-## [Unreleased]
+## [0.1.0] - 2026-10-01
+
+Initial release of the browser-first Fob platform.
 
 ### Added
 
-- **Vault sections: Files, Cards, Recovery Codes** — three new encrypted
+- **Vault sections: Files, Cards, Recovery Codes** — three encrypted
   categories alongside passwords/TOTP/SSH/notes:
   - **Files** — store small sensitive attachments inside the vault (capped
     at ~1 MiB each, because vault slots are a few MiB total) and download
@@ -26,13 +28,6 @@ land between releases. This file records what changed in each release.
   top bar when a vault is connected.
 - **Add button moved to the top of the sidebar**, above the Vault section,
   so it's always one click away regardless of the active view.
-
-## [0.1.0] - 2026-09-02
-
-Initial release of the browser-first Fob platform.
-
-### Added
-
 - **Browser vault** — a single self-contained `index.html` that opens
   entirely offline from `file://`. Runs `fob-core`'s Rust crypto compiled to
   WASM (via `fob-wasm`) and embedded in the file; no hand-written WebCrypto.
