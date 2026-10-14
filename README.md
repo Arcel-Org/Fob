@@ -84,7 +84,7 @@ All cryptographic operations live in `fob-core`, which has no filesystem or netw
 - **RSA SSH keys are stored and fingerprinted, but not exposed for signing.** The `rsa` crate (the only Rust RSA signing path) carries [RUSTSEC-2023-0071](https://rustsec.org/advisories/RUSTSEC-2023-0071) (a timing side-channel) with no fixed version upstream, so Fob does not depend on it at all. RSA key *entries* can still be stored, viewed and fingerprinted. Use Ed25519 (the default for new keys) where possible.
 - **Imported SSH keys must not be passphrase-protected** — the vault passphrase is already the protection layer; strip a key's own passphrase before importing it (`ssh-keygen -p -N ""`).
 - **The duress wipe overwrites the vault file's logical content, not necessarily its physical storage.** On a copy-on-write filesystem (e.g. macOS APFS) or an SSD doing wear-leveling internally, an in-place overwrite can leave the pre-wipe bytes recoverable from other physical blocks via forensic tools, filesystem snapshots, or drive firmware — the OS-level guarantee "this file's contents are now random bytes" does not extend to "the old bytes are physically gone." If your threat model includes forensic recovery of the underlying storage medium, don't rely on the duress wipe alone; treat it as closing off the easy/logical recovery path, not a physical-media guarantee.
-- **The browser vault can only wipe the actual `vault.fob` file if it was opened via the native file picker in a Chromium browser** (Chrome, Edge, Opera — anything supporting the File System Access API). Opening the vault by drag-and-drop, via a plain `<input type=file>` fallback, or via the automatic same-directory load on a `file://` page gives the page no writable handle to the original file at all — browsers don't allow arbitrary local file writes without one. In those cases (and always in Firefox/Safari, which don't implement the File System Access API), a duress passphrase still clears the browser's own IndexedDB cache, but the `vault.fob` file on the USB drive itself is left completely untouched. The CLI's duress-wipe path (`fob-core::vault::unlock_vault_with_duress_wipe`) can wipe the real file, but the CLI currently has no command that exercises it — so today the only practical way to get a physical wipe is to open the vault through the file picker in a supported browser. If you rely on the duress feature, confirm you opened the browser vault through its file picker (not drag-and-drop) in a supported browser.
+- **The browser vault can only wipe the actual `vault.fob` file if it was opened via the native file picker in a Chromium browser** (Chrome, Edge, Opera — anything supporting the File System Access API). Opening the vault by drag-and-drop, via a plain `<input type=file>` fallback, or via the automatic same-directory load on a `file://` page gives the page no writable handle to the original file at all — browsers don't allow arbitrary local file writes without one. In those cases (and always in Firefox/Safari, which don't implement the File System Access API), a duress passphrase still clears the browser's own IndexedDB cache, but the `vault.fob` file on the USB drive itself is left completely untouched. If you need a physical wipe from a terminal instead of the browser, `fob install` ships a prebuilt `fob` binary and a `fob.sh` launcher onto the USB (macOS + Linux, all supported architectures) — just open a terminal, `cd` into the USB and run `./fob.sh` (the launcher defaults to the duress wipe; `./fob.sh status` and `./fob.sh recover` also work, since the whole CLI rides along on the stick). Its output is deliberately indistinguishable from a wrong passphrase, so an observer can't tell a duress passphrase from a mistake, and the wipe hits the real file the same way `fob-core::vault::unlock_vault_with_duress_wipe` does. If you rely on the browser duress feature, confirm you opened the vault through its file picker (not drag-and-drop) in a supported browser.
 - **The vault file is trivially identifiable as a Fob vault, even without the passphrase.** The first 4 bytes of `vault.fob` are the literal ASCII magic `FOB2` — anyone with the file (a `file`/`xxd`/`head` away) can immediately confirm "this is a Fob password vault," before ever touching a passphrase. The decoy/duress design protects *which passphrase unlocks which content* once someone is already trying to open the vault; it does not hide that the file is a vault at all — the filename (`vault.fob`) gives that away too. If your threat model requires the file itself to be unidentifiable (e.g. deniability that you even use a password manager), rename it to something innocuous and be aware the magic bytes still identify it to anyone who inspects the content directly, not just the name.
 - **Actively-edited secret fields (the master passphrase, a password, a note body, an SSH private key) aren't guaranteed zeroized in every intermediate state while you're typing.** The CLI zeroizes each field's *final* value when its form is dropped, but Rust's `String` can reallocate internally as you type (e.g. via `push`/`insert`) — each old backing buffer is freed by the allocator without being zeroed first, so fragments of an in-progress passphrase can in principle linger in freed-but-unoverwritten heap memory until something else reuses that allocation. This only matters against an adversary who can already read the process's memory (a debugger, a core dump, a swapped-out page) — a much higher bar than a passing observer — but it means the README's "sensitive buffers zeroized" claim is exact for data at rest and for a field's value once you stop editing it, not for every transient buffer touched while you were actively typing it.
 
@@ -100,6 +100,34 @@ Installs `fob` to `~/.fob/bin` and adds that to your PATH.
 Every downloaded release is verified against its published SHA256 checksum
 before anything is installed, and against its [cosign](https://docs.sigstore.dev/)
 signature too if `cosign` is on your PATH.
+
+Once installed, `fob install <USB>` puts the browser vault **and** a
+terminal tool onto the stick: a copy of the `fob` binary for
+your platform plus a cross-platform `fob.sh` launcher. With internet
+it also fetches the prebuilt binaries for the other supported platforms
+(macOS arm64/x86_64, Linux x86_64/aarch64/armv7) from the latest release,
+so `./fob.sh` on the USB works on any macOS/Linux machine — even one
+that never had `fob` installed. No network? The launcher still works for
+whatever platform the drive was set up on.
+
+The launcher defaults to the duress wipe (`./fob.sh`) but passes through
+every other subcommand, so the whole CLI rides along on the stick:
+
+| Command | What it does on any machine |
+|---|---|
+| `./fob.sh` | duress wipe of `vault.fob` (silent, the default) |
+| `./fob.sh status` | what's on this USB / Fob version |
+| `./fob.sh verify` | is the vault intact? (no passphrase needed) |
+| `./fob.sh passwd` | change the main passphrase |
+| `./fob.sh doctor` | crypto self-test — is this binary genuine? |
+| `./fob.sh recover` | reset the main passphrase with your recovery key |
+| `./fob.sh check` | which platform binaries are on this USB |
+
+`verify` and `doctor` need no secrets at all, so they're safe to run on a
+machine you don't fully trust before deciding whether to trust the stick
+with your vault. `recover` and `passwd` are especially valuable because the
+browser vault has no recovery or passphrase-change path of its own — your
+recovery key plus any terminal gets you back in.
 
 Useful flags (pass them after `| sh -s --`, e.g. `... | sh -s -- --no-path`):
 
@@ -165,7 +193,7 @@ fob/
 ├── crates/
 │   ├── fob-core/       # cryptography and vault format — no I/O, pure logic
 │   ├── fob-wasm/       # browser bindings for fob-core (compiled to wasm32)
-│   ├── fob-cli/        # install/format/status/recover — USB provisioning only
+│   ├── fob-cli/        # install/format/status/verify/doctor/passwd/recover/wipe/update
 │   └── fob-host/       # host-OS integration for the CLI (device, clipboard, fs)
 ├── install/
 │   └── install.sh      # one-line installer
@@ -181,8 +209,13 @@ fob/
 
 The `fob` command is intentionally small: it only installs/updates and does
 low-level USB operations (`fob status`, `fob format`, `fob install`, `fob
-recover`, `fob update`). Day-to-day use happens entirely in the browser vault
-on the USB.
+verify`, `fob doctor`, `fob passwd`, `fob recover`, `fob wipe`, `fob
+update`). `fob install` also ships the binary
+and a `fob.sh` launcher onto the USB, so the whole CLI — including the
+terminal duress wipe, vault verify/doctor, and passphrase change — works
+from a terminal on any macOS/Linux machine.
+Day-to-day use happens entirely in the
+browser vault on the USB.
 
 ---
 

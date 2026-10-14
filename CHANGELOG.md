@@ -3,6 +3,32 @@
 Fob is pre-1.0 (`0.1.x`) and under active development: breaking changes may
 land between releases. This file records what changed in each release.
 
+## [Unreleased]
+
+### Added
+
+- **On-USB terminal tool** — `fob install` ships the `fob` binary and a
+  `fob.sh` launcher onto the USB drive, so the whole CLI works from a
+  terminal on any macOS/Linux machine — not just the one that set the drive
+  up, and without installing anything. The launcher defaults to the duress
+  physical wipe (`./fob.sh`, powered by
+  `fob-core::vault::unlock_vault_with_duress_wipe`) but passes through every
+  subcommand, so `./fob.sh status`, `./fob.sh verify` (vault integrity, no
+  passphrase), `./fob.sh doctor` (crypto self-test — confirms the on-USB
+  binary is genuine on an untrusted machine), `./fob.sh passwd` (change the
+  main passphrase) and `./fob.sh recover` (reset it with your recovery key)
+  all work too — `recover`/`passwd` matter because the browser vault has no
+  recovery or passphrase-change path of its own. A launcher-only `./fob.sh
+  check` lists which platform binaries are present. With internet, `fob
+  install` downloads the prebuilt binaries for all supported platforms
+  (macOS arm64/x86_64, Linux x86_64/aarch64/armv7) from the latest release;
+  without it, the launcher still works for the host's own platform. Wipe
+  output is deliberately indistinguishable from a wrong passphrase whether
+  or not the wipe happened, mirroring the browser vault.
+- **Passphrase prompts hide input** — `format`, `recover`, `passwd` and
+  `wipe` read passphrases with terminal echo disabled, so a passphrase
+  can't be shoulder-surfed while typing.
+
 ## [0.1.0] - 2026-10-01
 
 Initial release of the browser-first Fob platform.
