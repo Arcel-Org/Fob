@@ -19,6 +19,7 @@ fob-host = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 zeroize = { workspace = true }
+rpassword = "7"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

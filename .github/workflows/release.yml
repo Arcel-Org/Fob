@@ -32,6 +32,11 @@ jobs:
             cross: true
             strip: false
 
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            cross: false
+            strip: false
+
           - target: x86_64-apple-darwin
             runner: macos-latest
             cross: false
@@ -86,8 +91,11 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           ARTIFACT="${BINARY_NAME}-${VERSION}-${{ matrix.target }}.tar.gz"
-          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} .
-          tar czf "${ARTIFACT}" "${{ env.BINARY_NAME }}"
+          # Windows builds produce fob.exe; normalize to ./fob so the
+          # on-USB extractor finds a single binary on every platform.
+          cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}.exe" ./fob \
+            || cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}" ./fob
+          tar czf "${ARTIFACT}" ./fob
           echo "ARTIFACT=${ARTIFACT}" >> "$GITHUB_ENV"
 
       - name: Upload artifact

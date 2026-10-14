@@ -16,6 +16,7 @@ const RELEASES_API: &str = "https://api.github.com/repos/Arcel-Org/Fob/releases/
 /// one the drive was set up on. (Windows is intentionally absent: the browser
 /// vault already handles the wipe there via the File System Access API.)
 const PLATFORM_RELEASE_TRIPLES: &[(&str, &str)] = &[
+    ("windows-x86_64", "x86_64-pc-windows-msvc"),
     ("darwin-arm64", "aarch64-apple-darwin"),
     ("darwin-x86_64", "x86_64-apple-darwin"),
     ("linux-x86_64", "x86_64-unknown-linux-musl"),
@@ -70,10 +71,10 @@ fi
 if [ "${1:-}" = "check" ]; then
   echo "Fob on-USB binaries:"
   n=0
-  for b in darwin-arm64 darwin-x86_64 linux-x86_64 linux-aarch64 linux-armv7; do
-    if [ -x "$dir/fob-$b" ]; then echo "  ✓ fob-$b"; n=$((n+1)); else echo "  - fob-$b (missing)"; fi
+  for b in windows-x86_64 darwin-arm64 darwin-x86_64 linux-x86_64 linux-aarch64 linux-armv7; do
+    if [ -x "$dir/fob-$b" ] || [ -x "$dir/fob-$b.exe" ]; then echo "  ✓ fob-$b"; n=$((n+1)); else echo "  - fob-$b (missing)"; fi
   done
-  echo "($n/5 platforms — re-run 'fob install' with internet to fetch the rest)"
+  echo "($n/6 platforms — re-run 'fob install' with internet to fetch the rest)"
   [ -x "$bin" ] && "$bin" --version
   exit 0
 fi
@@ -84,6 +85,44 @@ if [ ! -x "$bin" ]; then
 fi
 if [ "$#" -eq 0 ]; then set -- wipe; fi
 exec "$bin" "$@"
+"##;
+
+/// On-USB Windows launcher (batch file). Picks the Windows x86_64 binary
+/// and passes through to the same fob subcommands as `fob.sh`. Written
+/// alongside `fob.sh` so a drive provisioned on any platform works everywhere.
+const WINDOWS_LAUNCHER: &str = r##"@echo off
+REM Fob on-USB tool - Windows.  Usage:
+REM   fob.cmd              duress wipe vault.fob (default)
+REM   fob.cmd status       show vault/version info
+REM   fob.cmd verify       is the vault intact? (no passphrase needed)
+REM   fob.cmd doctor       crypto self-test
+REM   fob.cmd passwd       change the main passphrase
+REM   fob.cmd recover      reset with your recovery key
+REM   fob.cmd check        which platform binaries are on this USB
+setlocal
+set "DIR=%~dp0"
+set "BIN=%DIR%fob-windows-x86_64.exe"
+if not exist "%BIN%" (
+  echo fob: no Windows x86_64 binary on this USB.
+  echo Re-run 'fob install' on a machine with internet, or open index.html in a browser.
+  exit /b 1
+)
+if "%~1"=="" (
+  "%BIN%" wipe
+  exit /b %errorlevel%
+)
+if /i "%~1"=="check" (
+  echo Fob on-USB binaries:
+  for %%b in (windows-x86_64 darwin-arm64 darwin-x86_64 linux-x86_64 linux-aarch64 linux-armv7) do (
+    if exist "%DIR%fob-%%b.exe" (echo   [x] fob-%%b.exe) else (
+      if exist "%DIR%fob-%%b" (echo   [x] fob-%%b) else (echo   [ ] fob-%%b)
+    )
+  )
+  "%BIN%" --version
+  exit /b 0
+)
+"%BIN%" %*
+exit /b %errorlevel%
 "##;
 
 /// `install.sh` pinned to a specific release tag rather than the mutable
@@ -255,21 +294,23 @@ fn cmd_install(device: Option<PathBuf>) -> Result<()> {
     ship_usb_tool(&mount)?;
     fetch_other_platform_binaries(&mount);
     println!("  Open index.html (or vault.fob) on the USB to use Fob.");
-    println!("  Terminal tool on any macOS/Linux machine (no install needed):");
-    println!("    cd into the USB and run  ./fob.sh             (duress wipe)");
-    println!("                             ./fob.sh status       (what's on this USB)");
-    println!("                             ./fob.sh recover      (forgot your passphrase?)");
+    println!("  Terminal tool on any machine (no install needed):");
+    println!("    macOS/Linux: cd into the USB and run  ./fob.sh");
+    println!("    Windows:     open the USB and run  fob.cmd");
+    println!("    (commands: wipe · status · verify · passwd · recover · check)");
     Ok(())
 }
 
 /// Ship the on-USB tool: a copy of this `fob` binary (so the whole CLI —
-/// wipe/status/recover/... — works even with no network, on this machine's
-/// OS family) plus the cross-platform `fob.sh` launcher.
+/// wipe/status/verify/doctor/passwd/recover/... — works even with no
+/// network, on this machine's OS family), plus BOTH cross-platform
+/// launchers (`fob.sh` for macOS/Linux and `fob.cmd` for Windows) so a
+/// drive provisioned anywhere works everywhere.
 fn ship_usb_tool(mount: &std::path::Path) -> Result<()> {
     let exe = std::env::current_exe()?;
     match current_platform_key() {
         Some(key) => {
-            let dest = mount.join(format!("fob-{key}"));
+            let dest = mount.join(platform_bin_name(key));
             std::fs::copy(&exe, &dest)?;
             make_executable(&dest)?;
             println!(
@@ -278,39 +319,51 @@ fn ship_usb_tool(mount: &std::path::Path) -> Result<()> {
             );
         }
         None => {
-            println!("  ⚠  This platform isn't one we ship binaries for; only the launcher will be written.");
+            println!("  ⚠  This platform isn't one we ship binaries for; only the launchers will be written.");
         }
     }
-    let launcher = mount.join("fob.sh");
-    atomic_write(&launcher, USB_TOOL_LAUNCHER.as_bytes())?;
-    make_executable(&launcher)?;
-    println!(
-        "  ✓ Wrote {}",
-        launcher.file_name().unwrap_or_default().to_string_lossy()
-    );
+    let sh = mount.join("fob.sh");
+    atomic_write(&sh, USB_TOOL_LAUNCHER.as_bytes())?;
+    make_executable(&sh)?;
+    let cmd = mount.join("fob.cmd");
+    atomic_write(&cmd, WINDOWS_LAUNCHER.as_bytes())?;
+    println!("  ✓ Wrote fob.sh and fob.cmd launchers");
     Ok(())
 }
 
+#[cfg(unix)]
 fn make_executable(path: &std::path::Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(path)?.permissions();
-        perms.set_mode(perms.mode() | 0o111);
-        std::fs::set_permissions(path, perms)?;
-    }
+    use std::os::unix::fs::PermissionsExt;
+    let mut perms = std::fs::metadata(path)?.permissions();
+    perms.set_mode(perms.mode() | 0o111);
+    std::fs::set_permissions(path, perms)?;
     Ok(())
+}
+
+#[cfg(not(unix))]
+fn make_executable(_path: &std::path::Path) -> Result<()> {
+    Ok(()) // executability on Windows is conveyed by the .exe extension.
 }
 
 /// Platform key for the running OS/arch, or None if it's not one we ship.
 fn current_platform_key() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "x86_64") => Some("windows-x86_64"),
         ("macos", "aarch64") => Some("darwin-arm64"),
         ("macos", "x86_64") => Some("darwin-x86_64"),
         ("linux", "x86_64") => Some("linux-x86_64"),
         ("linux", "aarch64") => Some("linux-aarch64"),
         ("linux", "arm") => Some("linux-armv7"),
         _ => None,
+    }
+}
+
+/// Filename for a platform's on-USB binary (Windows executables carry `.exe`).
+fn platform_bin_name(platform_key: &str) -> String {
+    if platform_key.starts_with("windows-") {
+        format!("fob-{platform_key}.exe")
+    } else {
+        format!("fob-{platform_key}")
     }
 }
 
@@ -332,7 +385,7 @@ fn fetch_other_platform_binaries(mount: &std::path::Path) {
         if Some(*key) == host_key {
             continue;
         }
-        let dest = mount.join(format!("fob-{key}"));
+        let dest = mount.join(platform_bin_name(key));
         if dest.exists() {
             continue; // already on the USB
         }
@@ -412,11 +465,16 @@ fn download_and_extract(url: &str, dest: &std::path::Path) -> Result<bool> {
         return Err(anyhow::anyhow!("tar extraction failed"));
     }
 
-    let extracted = tmpdir.join("fob");
-    if !extracted.exists() {
+    let extracted = if tmpdir.join("fob").exists() {
+        tmpdir.join("fob")
+    } else if tmpdir.join("fob.exe").exists() {
+        tmpdir.join("fob.exe")
+    } else {
         let _ = std::fs::remove_dir_all(&tmpdir);
-        return Err(anyhow::anyhow!("release tarball had no `fob` binary"));
-    }
+        return Err(anyhow::anyhow!(
+            "release tarball had no `fob`/`fob.exe` binary"
+        ));
+    };
     std::fs::copy(&extracted, dest)?;
     make_executable(dest)?;
     let _ = std::fs::remove_dir_all(&tmpdir);
@@ -647,46 +705,24 @@ fn resolve_vault_path(device: Option<PathBuf>) -> Result<PathBuf> {
 }
 
 /// Read a line from stdin with terminal echo disabled (so a duress
-/// passphrase can't be shoulder-surfed). Falls back to an echoing read if
-/// stdin isn't a terminal.
+/// passphrase can't be shoulder-surfed). Works on macOS, Linux and Windows
+/// (rpassword uses the Console API on Windows, termios elsewhere) when stdin
+/// is a real terminal; falls back to a plain read when stdin is piped (e.g.
+/// automation), where there's nothing to echo anyway.
 fn read_secret(prompt: &str) -> Result<String> {
+    use std::io::IsTerminal;
+
     print!("{prompt}");
     std::io::stdout().flush()?;
-    let mut s = String::new();
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::io::AsRawFd;
-
-        let fd = std::io::stdin().as_raw_fd();
-        let mut orig: libc::termios = unsafe { std::mem::zeroed() };
-        let mut no_echo = false;
-        unsafe {
-            if libc::tcgetattr(fd, &mut orig) == 0 {
-                let mut noecho = orig;
-                noecho.c_lflag &= !libc::ECHO;
-                no_echo = libc::tcsetattr(fd, libc::TCSANOW, &noecho) == 0;
-            }
-        }
-
-        let read = std::io::stdin().read_line(&mut s);
-
-        if no_echo {
-            unsafe { libc::tcsetattr(fd, libc::TCSANOW, &orig) };
-        }
-        println!();
-        let _ = std::io::stdout().flush();
-        read?;
-    }
-
-    #[cfg(not(unix))]
-    {
+    let line = if std::io::stdin().is_terminal() {
+        rpassword::read_password()?
+    } else {
+        let mut s = String::new();
         std::io::stdin().read_line(&mut s)?;
-        println!();
-        let _ = std::io::stdout().flush();
-    }
-
-    Ok(s.trim_end_matches(['\r', '\n']).to_string())
+        s
+    };
+    println!();
+    Ok(line.trim_end_matches(['\r', '\n']).to_string())
 }
 
 /// `fob status` — list USB drives, which have a vault, and current version.
