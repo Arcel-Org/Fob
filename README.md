@@ -11,9 +11,14 @@ An encrypted vault that lives on a USB drive — passwords, TOTP codes, SSH keys
 [![Rust 1.88+](https://img.shields.io/badge/rust-1.88+-orange.svg)](#building-from-source)
 [![GitHub Pages](https://img.shields.io/badge/web-fob.site-blue.svg)](https://arcel-org.github.io/Fob/)
 
+**Platforms** —
+[![macOS](https://img.shields.io/badge/macOS-%E2%9C%93%20arm64%20+%20Intel-brightgreen.svg)]()
+[![Linux](https://img.shields.io/badge/Linux-%E2%9C%93%20x86_64%20+%20ARM-brightgreen.svg)]()
+[![Windows](https://img.shields.io/badge/Windows-%E2%9C%93%20x86_64-blue.svg)](https://github.com/Arcel-Org/Fob/releases)
+
 </div>
 
-> **⚠️ In development — pre-1.0 (`0.1.x`).** Fob is under active development.
+> **⚠️ In development — pre-1.0 (`0.x`).** Fob is under active development.
 > The CLI and the vault format are still stabilizing: **breaking changes may
 > land between releases** (including to the on-USB format). Keep a backup and
 > a [recovery key](#security) for anything you care about, and note that
@@ -21,6 +26,20 @@ An encrypted vault that lives on a USB drive — passwords, TOTP codes, SSH keys
 > build. See [CHANGELOG.md](CHANGELOG.md) for what changed in each release.
 
 Fob turns any USB stick into a cryptographic security key. Plug it in, open `index.html`, and unlock with a passphrase — your credentials are available as a password manager, TOTP generator, SSH key store, and encrypted file vault. Unplug and everything locks. The browser vault runs the exact same Rust crypto as the CLI (compiled to WASM and embedded in the single HTML file), so a vault created on the command line opens in the browser and vice versa.
+
+---
+
+## Supported platforms
+
+The **browser vault** is a single self-contained HTML file — it opens on any OS with a web browser, nothing to install. The **on-USB terminal tool** (`fob.sh` / `fob.cmd`) is a prebuilt native binary that `fob install` puts on the stick, so the whole CLI (wipe, status, verify, doctor, passwd, recover, check) works from a terminal on any of these — **including Windows, new in v0.2.0:**
+
+| OS | Architectures | Terminal launcher |
+|---|---|---|
+| **macOS** | Apple Silicon (arm64) · Intel (x86_64) | `./fob.sh` |
+| **Linux** | x86_64 · aarch64 · armv7 | `./fob.sh` |
+| **Windows** | x86_64 | `fob.cmd` |
+
+A drive provisioned with internet (`fob install`) carries binaries for all of these at once — so the same USB works no matter which machine you're on.
 
 ---
 
@@ -122,6 +141,9 @@ every other subcommand, so the whole CLI rides along on the stick:
 | `./fob.sh doctor` | crypto self-test — is this binary genuine? |
 | `./fob.sh recover` | reset the main passphrase with your recovery key |
 | `./fob.sh check` | which platform binaries are on this USB |
+
+On Windows, run the identical commands with `fob.cmd` (e.g. `fob.cmd
+verify`) from a Command Prompt or PowerShell in the USB's folder.
 
 `verify` and `doctor` need no secrets at all, so they're safe to run on a
 machine you don't fully trust before deciding whether to trust the stick
