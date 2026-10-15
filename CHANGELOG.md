@@ -3,15 +3,22 @@
 Fob is pre-1.0 (`0.1.x`) and under active development: breaking changes may
 land between releases. This file records what changed in each release.
 
-## [Unreleased]
+## [0.2.0] - 2026-10-14
 
 ### Added
 
+- **Windows support** — the on-USB tool now ships a Windows x86_64 binary
+  and a `fob.cmd` batch launcher (alongside `fob.sh`), and the release/CI
+  matrix builds and tests `x86_64-pc-windows-msvc`. Passphrases are hidden
+  on input via rpassword (Console API on Windows, termios elsewhere). A
+  drive provisioned on any OS works on macOS, Linux and Windows.
+
 - **On-USB terminal tool** — `fob install` ships the `fob` binary and a
-  `fob.sh` launcher onto the USB drive, so the whole CLI works from a
-  terminal on any macOS/Linux machine — not just the one that set the drive
-  up, and without installing anything. The launcher defaults to the duress
-  physical wipe (`./fob.sh`, powered by
+  `fob.sh`/`fob.cmd` launcher onto the USB drive, so the whole CLI works
+  from a terminal on any macOS/Linux/Windows machine — not just the one
+  that set the drive up, and without installing anything. The launcher
+  defaults to the duress
+  physical wipe (`./fob.sh` / `fob.cmd`, powered by
   `fob-core::vault::unlock_vault_with_duress_wipe`) but passes through every
   subcommand, so `./fob.sh status`, `./fob.sh verify` (vault integrity, no
   passphrase), `./fob.sh doctor` (crypto self-test — confirms the on-USB
@@ -21,13 +28,21 @@ land between releases. This file records what changed in each release.
   recovery or passphrase-change path of its own. A launcher-only `./fob.sh
   check` lists which platform binaries are present. With internet, `fob
   install` downloads the prebuilt binaries for all supported platforms
-  (macOS arm64/x86_64, Linux x86_64/aarch64/armv7) from the latest release;
+  (Windows x86_64, macOS arm64/x86_64, Linux x86_64/aarch64/armv7) from the
+  latest release;
   without it, the launcher still works for the host's own platform. Wipe
   output is deliberately indistinguishable from a wrong passphrase whether
   or not the wipe happened, mirroring the browser vault.
 - **Passphrase prompts hide input** — `format`, `recover`, `passwd` and
   `wipe` read passphrases with terminal echo disabled, so a passphrase
   can't be shoulder-surfed while typing.
+
+### Security
+
+- **Dependency currency + audit clean** — full `cargo update` (33 crates:
+  clap, wasm-bindgen, serde_json, sha2, thiserror, uuid, der, rustix, …).
+  `cargo audit` reports 0 vulnerabilities / 0 yanked crates (CI runs
+  `audit` + `deny` on every push).
 
 ## [0.1.0] - 2026-10-01
 
