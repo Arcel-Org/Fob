@@ -2,6 +2,12 @@
 
 Thank you for your interest in contributing to Fob.
 
+## Contributor License Agreement
+
+Before your contribution can be accepted, you must sign the [**Arcel Contributor License Agreement (CLA)**](https://github.com/Arcel-Org/cla/blob/main/cla.md). This grants Arcel LLC the right to include your contribution in the open-source releases of Fob (MIT OR Apache-2.0) and under Arcel's commercial licenses.
+
+Signing is quick: if the [CLA Assistant](https://cla-assistant.io/) bot is installed it will prompt you on your pull request; otherwise email `legal@arcel.org` per the instructions in the CLA document. Contributions cannot be merged until you've signed.
+
 ## Getting started
 
 Requires Rust 1.88+.
